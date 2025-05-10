@@ -20,6 +20,7 @@ public class MainScheduleFrame extends JFrame {
     private List<ScheduleEntry> scheduleEntries;
     private Scheduler scheduler;
     private ConflictChecker conflictChecker;
+    private TimetablePanel timetablePanel;
 
     public MainScheduleFrame() {
         setTitle("Schedule Manager");
@@ -27,8 +28,12 @@ public class MainScheduleFrame extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
+        timetablePanel = new TimetablePanel();
         schedulePanel = new SchedulePanel();
-        add(schedulePanel, BorderLayout.CENTER);
+        JTabbedPane tabbedPane = new JTabbedPane();
+        tabbedPane.addTab("Timetable", timetablePanel);
+        tabbedPane.addTab("Schedule Table", schedulePanel);
+        add(tabbedPane, BorderLayout.CENTER);
         // Add button panel
         JPanel buttonPanel = new JPanel();
         JButton addButton = new JButton("Add");
@@ -141,14 +146,10 @@ public class MainScheduleFrame extends JFrame {
             courses = dataManager.getAllCourses();
             rooms = dataManager.getAllRooms();
             scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
+            timetablePanel.setEntries(scheduleEntries);
+            schedulePanel.clearTable();
             for (ScheduleEntry entry : scheduleEntries) {
-                schedulePanel.addScheduleRow(new Object[] {
-                    entry.getCourse() != null ? entry.getCourse().getCourseName() : "",
-                    entry.getRoom() != null ? entry.getRoom().getRoomName() : "",
-                    entry.getDayOfWeek(),
-                    entry.getStartTime(),
-                    entry.getEndTime()
-                });
+                schedulePanel.addScheduleRow(entry);
             }
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -160,15 +161,10 @@ public class MainScheduleFrame extends JFrame {
             courses = dataManager.getAllCourses();
             rooms = dataManager.getAllRooms();
             scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
+            timetablePanel.setEntries(scheduleEntries);
             schedulePanel.clearTable();
             for (ScheduleEntry entry : scheduleEntries) {
-                schedulePanel.addScheduleRow(new Object[] {
-                    entry.getCourse() != null ? entry.getCourse().getCourseName() : "",
-                    entry.getRoom() != null ? entry.getRoom().getRoomName() : "",
-                    entry.getDayOfWeek(),
-                    entry.getStartTime(),
-                    entry.getEndTime()
-                });
+                schedulePanel.addScheduleRow(entry);
             }
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);

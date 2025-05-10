@@ -3,20 +3,25 @@ package com.yourcompany.schedule.ui;
 import com.yourcompany.schedule.model.Course;
 import com.yourcompany.schedule.model.Room;
 import com.yourcompany.schedule.model.ScheduleEntry;
+import com.github.lgooddatepicker.components.DateTimePicker;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+import javax.swing.SpinnerDateModel;
 
 public class AddEditEntryDialog extends JDialog {
     private JComboBox<Course> courseCombo;
     private JComboBox<Room> roomCombo;
     private JComboBox<DayOfWeek> dayCombo;
-    private JTextField startTimeField;
-    private JTextField endTimeField;
+    private DateTimePicker startDateTimePicker;
+    private DateTimePicker endDateTimePicker;
     private boolean confirmed = false;
     private Course selectedCourse;
     private Room selectedRoom;
@@ -52,13 +57,13 @@ public class AddEditEntryDialog extends JDialog {
         dayCombo = new JComboBox<>(DayOfWeek.values());
         add(dayCombo);
 
-        add(new JLabel("Start Time (HH:mm):"));
-        startTimeField = new JTextField();
-        add(startTimeField);
+        add(new JLabel("Start Date & Time:"));
+        startDateTimePicker = new DateTimePicker();
+        add(startDateTimePicker);
 
-        add(new JLabel("End Time (HH:mm):"));
-        endTimeField = new JTextField();
-        add(endTimeField);
+        add(new JLabel("End Date & Time:"));
+        endDateTimePicker = new DateTimePicker();
+        add(endDateTimePicker);
 
         JButton okButton = new JButton("OK");
         JButton cancelButton = new JButton("Cancel");
@@ -70,9 +75,13 @@ public class AddEditEntryDialog extends JDialog {
             selectedRoom = entry.getRoom();
             courseField.setText(selectedCourse != null ? selectedCourse.toString() : "");
             roomField.setText(selectedRoom != null ? selectedRoom.toString() : "");
-            dayCombo.setSelectedItem(entry.getDayOfWeek());
-            startTimeField.setText(entry.getStartTime().toString());
-            endTimeField.setText(entry.getEndTime().toString());
+            // Set pickers using LocalDateTime
+            try {
+                startDateTimePicker.setDateTimePermissive(entry.getStartDateTime());
+                endDateTimePicker.setDateTimePermissive(entry.getEndDateTime());
+            } catch (Exception ex) {
+                // fallback: do nothing
+            }
         }
 
         selectCourseButton.addActionListener(e -> {
@@ -110,10 +119,9 @@ public class AddEditEntryDialog extends JDialog {
         try {
             Course course = selectedCourse;
             Room room = selectedRoom;
-            DayOfWeek day = (DayOfWeek) dayCombo.getSelectedItem();
-            LocalTime start = LocalTime.parse(startTimeField.getText());
-            LocalTime end = LocalTime.parse(endTimeField.getText());
-            return new ScheduleEntry(0, course, room, day, start, end);
+            java.time.LocalDateTime start = startDateTimePicker.getDateTimePermissive();
+            java.time.LocalDateTime end = endDateTimePicker.getDateTimePermissive();
+            return new ScheduleEntry(0, course, room, start, end);
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Invalid input: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             return null;

@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.LocalDateTime;
 
 public class DataManager {
     private DatabaseConnector connector;
@@ -148,9 +149,8 @@ public class DataManager {
                 entry.setEntryId(rs.getInt("entry_id"));
                 entry.setCourse(course);
                 entry.setRoom(room);
-                entry.setDayOfWeek(DayOfWeek.valueOf(rs.getString("day_of_week")));
-                entry.setStartTime(rs.getTime("start_time").toLocalTime());
-                entry.setEndTime(rs.getTime("end_time").toLocalTime());
+                entry.setStartDateTime(rs.getTimestamp("start_datetime").toLocalDateTime());
+                entry.setEndDateTime(rs.getTimestamp("end_datetime").toLocalDateTime());
                 entries.add(entry);
             }
         }
@@ -158,14 +158,13 @@ public class DataManager {
     }
 
     public void addScheduleEntry(ScheduleEntry entry) throws SQLException {
-        String query = "INSERT INTO schedule_entries (course_id, room_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?, ?)";
+        String query = "INSERT INTO schedule_entries (course_id, room_id, start_datetime, end_datetime) VALUES (?, ?, ?, ?)";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
             pstmt.setInt(1, entry.getCourse().getCourseId());
             pstmt.setInt(2, entry.getRoom().getRoomId());
-            pstmt.setString(3, entry.getDayOfWeek().name());
-            pstmt.setTime(4, java.sql.Time.valueOf(entry.getStartTime()));
-            pstmt.setTime(5, java.sql.Time.valueOf(entry.getEndTime()));
+            pstmt.setTimestamp(3, java.sql.Timestamp.valueOf(entry.getStartDateTime()));
+            pstmt.setTimestamp(4, java.sql.Timestamp.valueOf(entry.getEndDateTime()));
             pstmt.executeUpdate();
             try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -176,15 +175,14 @@ public class DataManager {
     }
 
     public void updateScheduleEntry(ScheduleEntry entry) throws SQLException {
-        String query = "UPDATE schedule_entries SET course_id=?, room_id=?, day_of_week=?, start_time=?, end_time=? WHERE entry_id=?";
+        String query = "UPDATE schedule_entries SET course_id=?, room_id=?, start_datetime=?, end_datetime=? WHERE entry_id=?";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
             pstmt.setInt(1, entry.getCourse().getCourseId());
             pstmt.setInt(2, entry.getRoom().getRoomId());
-            pstmt.setString(3, entry.getDayOfWeek().name());
-            pstmt.setTime(4, java.sql.Time.valueOf(entry.getStartTime()));
-            pstmt.setTime(5, java.sql.Time.valueOf(entry.getEndTime()));
-            pstmt.setInt(6, entry.getEntryId());
+            pstmt.setTimestamp(3, java.sql.Timestamp.valueOf(entry.getStartDateTime()));
+            pstmt.setTimestamp(4, java.sql.Timestamp.valueOf(entry.getEndDateTime()));
+            pstmt.setInt(5, entry.getEntryId());
             pstmt.executeUpdate();
         }
     }

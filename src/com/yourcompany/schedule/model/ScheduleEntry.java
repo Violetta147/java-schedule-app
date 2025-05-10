@@ -1,31 +1,27 @@
 package com.yourcompany.schedule.model;
 
-import java.time.DayOfWeek;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 
 public class ScheduleEntry {
     private int entryId;
     private Course course;
     private Room room;
-    private DayOfWeek dayOfWeek;
-    private LocalTime startTime;
-    private LocalTime endTime;
+    private LocalDateTime startDateTime;
+    private LocalDateTime endDateTime;
 
     public ScheduleEntry() {}
 
-    public ScheduleEntry(int entryId, Course course, Room room, DayOfWeek dayOfWeek, LocalTime startTime, LocalTime endTime) {
+    public ScheduleEntry(int entryId, Course course, Room room, LocalDateTime startDateTime, LocalDateTime endDateTime) {
         this.entryId = entryId;
         this.course = course;
         this.room = room;
-        this.dayOfWeek = dayOfWeek;
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.startDateTime = startDateTime;
+        this.endDateTime = endDateTime;
     }
 
     public boolean conflictsWith(ScheduleEntry other) {
-        return dayOfWeek.equals(other.dayOfWeek) &&
-               !startTime.isAfter(other.endTime) &&
-               !endTime.isBefore(other.startTime);
+        return !startDateTime.isAfter(other.endDateTime) &&
+               !endDateTime.isBefore(other.startDateTime);
     }
 
     public int getEntryId() { return entryId; }
@@ -34,10 +30,8 @@ public class ScheduleEntry {
     public void setCourse(Course course) { this.course = course; }
     public Room getRoom() { return room; }
     public void setRoom(Room room) { this.room = room; }
-    public DayOfWeek getDayOfWeek() { return dayOfWeek; }
-    public void setDayOfWeek(DayOfWeek dayOfWeek) { this.dayOfWeek = dayOfWeek; }
-    public LocalTime getStartTime() { return startTime; }
-    public void setStartTime(LocalTime startTime) { this.startTime = startTime; }
-    public LocalTime getEndTime() { return endTime; }
-    public void setEndTime(LocalTime endTime) { this.endTime = endTime; }
+    public LocalDateTime getStartDateTime() { return startDateTime; }
+    public void setStartDateTime(LocalDateTime startDateTime) { this.startDateTime = startDateTime; }
+    public LocalDateTime getEndDateTime() { return endDateTime; }
+    public void setEndDateTime(LocalDateTime endDateTime) { this.endDateTime = endDateTime; }
 } 
