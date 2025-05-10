@@ -1,0 +1,6 @@
+---
+description: This rule is helping for managing project and project modification - you must follow this
+globs: 
+alwaysApply: false
+---
+[projectsrs.md](mdc:projectsrs.md)
