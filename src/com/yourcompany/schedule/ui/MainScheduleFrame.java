@@ -2,6 +2,8 @@ package com.yourcompany.schedule.ui;
 
 import javax.swing.*;
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import com.yourcompany.schedule.data.DataManager;
 import com.yourcompany.schedule.model.Course;
 import com.yourcompany.schedule.model.Room;
@@ -9,6 +11,7 @@ import com.yourcompany.schedule.model.ScheduleEntry;
 import java.util.List;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.time.format.DateTimeFormatter;
 import com.yourcompany.schedule.core.Scheduler;
 import com.yourcompany.schedule.core.ConflictChecker;
 
@@ -21,6 +24,8 @@ public class MainScheduleFrame extends JFrame {
     private Scheduler scheduler;
     private ConflictChecker conflictChecker;
     private TimetablePanel timetablePanel;
+    private JLabel weekLabel;
+    private DateTimeFormatter weekFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     public MainScheduleFrame() {
         setTitle("Schedule Manager");
@@ -30,7 +35,52 @@ public class MainScheduleFrame extends JFrame {
         setLayout(new BorderLayout());
         timetablePanel = new TimetablePanel();
         schedulePanel = new SchedulePanel();
+        
+        // Create week navigation panel
+        JPanel weekNavPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JButton prevWeekButton = new JButton("◀ Previous Week");
+        JButton currentWeekButton = new JButton("Current Week");
+        JButton nextWeekButton = new JButton("Next Week ▶");
+        weekLabel = new JLabel();
+        updateWeekLabel();
+        
+        weekLabel.setFont(weekLabel.getFont().deriveFont(Font.BOLD));
+        weekNavPanel.add(prevWeekButton);
+        weekNavPanel.add(currentWeekButton);
+        weekNavPanel.add(weekLabel);
+        weekNavPanel.add(nextWeekButton);
+        
+        prevWeekButton.addActionListener(e -> {
+            timetablePanel.previousWeek();
+            updateWeekLabel();
+            refreshTable();
+        });
+        
+        currentWeekButton.addActionListener(e -> {
+            timetablePanel.setCurrentWeek(java.time.LocalDate.now());
+            updateWeekLabel();
+            refreshTable();
+        });
+        
+        nextWeekButton.addActionListener(e -> {
+            timetablePanel.nextWeek();
+            updateWeekLabel();
+            refreshTable();
+        });
+        
         JTabbedPane tabbedPane = new JTabbedPane();
+        
+        // Create a scroll pane for the timetable panel
+        JScrollPane timetableScrollPane = new JScrollPane(timetablePanel);
+        timetableScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        timetableScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        timetableScrollPane.getVerticalScrollBar().setUnitIncrement(16); // Make scrolling smoother
+        
+        // Add week navigation to the top of timetable tab
+        JPanel timetablePanel = new JPanel(new BorderLayout());
+        timetablePanel.add(weekNavPanel, BorderLayout.NORTH);
+        timetablePanel.add(timetableScrollPane, BorderLayout.CENTER);
+        
         tabbedPane.addTab("Timetable", timetablePanel);
         tabbedPane.addTab("Schedule Table", schedulePanel);
         add(tabbedPane, BorderLayout.CENTER);
@@ -41,11 +91,15 @@ public class MainScheduleFrame extends JFrame {
         JButton deleteButton = new JButton("Delete");
         JButton manageCoursesButton = new JButton("Manage Courses");
         JButton manageRoomsButton = new JButton("Manage Rooms");
+        JButton manageTeachersButton = new JButton("Manage Teachers");
+        JButton manageClassesButton = new JButton("Manage Classes");
         buttonPanel.add(addButton);
         buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
         buttonPanel.add(manageCoursesButton);
         buttonPanel.add(manageRoomsButton);
+        buttonPanel.add(manageTeachersButton);
+        buttonPanel.add(manageClassesButton);
         add(buttonPanel, BorderLayout.SOUTH);
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
@@ -138,11 +192,29 @@ public class MainScheduleFrame extends JFrame {
             dialog.setVisible(true);
             refreshTable();
         });
+        manageTeachersButton.addActionListener(e -> {
+            ManageTeachersDialog dialog = new ManageTeachersDialog(MainScheduleFrame.this, dataManager);
+            dialog.setVisible(true);
+            refreshTable();
+        });
+        manageClassesButton.addActionListener(e -> {
+            ManageClassesDialog dialog = new ManageClassesDialog(MainScheduleFrame.this, dataManager);
+            dialog.setVisible(true);
+            refreshTable();
+        });
     }
 
     private void loadData() {
         try {
             dataManager = new DataManager();
+            
+            // Initialize the database schema and seed data if needed
+            try {
+                dataManager.initializeDatabase();
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Error initializing database: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                System.exit(1);
+            }
             courses = dataManager.getAllCourses();
             rooms = dataManager.getAllRooms();
             scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
@@ -161,7 +233,12 @@ public class MainScheduleFrame extends JFrame {
             courses = dataManager.getAllCourses();
             rooms = dataManager.getAllRooms();
             scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
-            timetablePanel.setEntries(scheduleEntries);
+            
+            // Filter entries for the timetable based on the selected week
+            List<ScheduleEntry> weekEntries = filterEntriesForSelectedWeek(scheduleEntries);
+            timetablePanel.setEntries(weekEntries);
+            
+            // Update the schedule table with all entries
             schedulePanel.clearTable();
             for (ScheduleEntry entry : scheduleEntries) {
                 schedulePanel.addScheduleRow(entry);
@@ -169,5 +246,42 @@ public class MainScheduleFrame extends JFrame {
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Error loading data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+    
+    /**
+     * Filters schedule entries to only include those in the currently selected week
+     */
+    private List<ScheduleEntry> filterEntriesForSelectedWeek(List<ScheduleEntry> allEntries) {
+        if (allEntries == null) return new java.util.ArrayList<>();
+        
+        java.time.LocalDate weekStart = timetablePanel.getCurrentWeekStart();
+        java.time.LocalDate weekEnd = weekStart.plusDays(6);
+        
+        return allEntries.stream()
+            .filter(entry -> {
+                if (entry.getStartDateTime() == null) return false;
+                
+                java.time.LocalDate entryDate = entry.getStartDateTime().toLocalDate();
+                return !entryDate.isBefore(weekStart) && !entryDate.isAfter(weekEnd);
+            })
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    private void updateWeekLabel() {
+        String startDate = timetablePanel.getCurrentWeekStart().format(weekFormatter);
+        String endDate = timetablePanel.getCurrentWeekStart().plusDays(6).format(weekFormatter);
+        int weekNumber = timetablePanel.getCurrentWeekNumber();
+        int year = timetablePanel.getCurrentYear();
+        weekLabel.setText(String.format("Week %d, %d: %s - %s", weekNumber, year, startDate, endDate));
+        
+        // Sync the week selection with the schedule panel
+        schedulePanel.setCurrentWeek(timetablePanel.getCurrentWeekStart());
+    }
+
+    // Add method to handle week changes from schedule panel
+    public void setCurrentWeek(java.time.LocalDate date) {
+        timetablePanel.setCurrentWeek(date);
+        updateWeekLabel();
+        refreshTable();
     }
 } 

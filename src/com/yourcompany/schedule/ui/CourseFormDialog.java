@@ -1,20 +1,31 @@
 package com.yourcompany.schedule.ui;
 
 import com.yourcompany.schedule.model.Course;
+import com.yourcompany.schedule.model.Teacher;
+import com.yourcompany.schedule.model.SchoolClass;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 public class CourseFormDialog extends JDialog {
-    private JTextField codeField, nameField, instructorField, creditsField;
+    private JTextField codeField, nameField, creditsField;
+    private JComboBox<Teacher> teacherComboBox;
+    private JComboBox<SchoolClass> classComboBox;
     private boolean confirmed = false;
     private Course course;
+    private List<Teacher> teachers;
+    private List<SchoolClass> classes;
 
-    public CourseFormDialog(JFrame parent, Course course) {
+    public CourseFormDialog(JFrame parent, Course course, List<Teacher> teachers, List<SchoolClass> classes) {
         super(parent, course == null ? "Add Course" : "Edit Course", true);
-        setSize(350, 250);
+        this.course = course;
+        this.teachers = teachers;
+        this.classes = classes;
+        
+        setSize(400, 300);
         setLocationRelativeTo(parent);
-        setLayout(new GridLayout(5, 2, 5, 5));
+        setLayout(new GridLayout(6, 2, 5, 5));
 
         add(new JLabel("Course Code:"));
         codeField = new JTextField();
@@ -24,9 +35,21 @@ public class CourseFormDialog extends JDialog {
         nameField = new JTextField();
         add(nameField);
 
-        add(new JLabel("Instructor:"));
-        instructorField = new JTextField();
-        add(instructorField);
+        add(new JLabel("Teacher:"));
+        teacherComboBox = new JComboBox<>();
+        teacherComboBox.addItem(null); // Add empty option
+        for (Teacher teacher : teachers) {
+            teacherComboBox.addItem(teacher);
+        }
+        add(teacherComboBox);
+
+        add(new JLabel("Class:"));
+        classComboBox = new JComboBox<>();
+        classComboBox.addItem(null); // Add empty option
+        for (SchoolClass schoolClass : classes) {
+            classComboBox.addItem(schoolClass);
+        }
+        add(classComboBox);
 
         add(new JLabel("Credits:"));
         creditsField = new JTextField();
@@ -40,9 +63,29 @@ public class CourseFormDialog extends JDialog {
         if (course != null) {
             codeField.setText(course.getCourseCode());
             nameField.setText(course.getCourseName());
-            instructorField.setText(course.getInstructor());
             creditsField.setText(String.valueOf(course.getCredits()));
-            this.course = course;
+            
+            // Set selected teacher if exists
+            if (course.getTeacher() != null) {
+                for (int i = 0; i < teacherComboBox.getItemCount(); i++) {
+                    Teacher item = teacherComboBox.getItemAt(i);
+                    if (item != null && item.getTeacherId() == course.getTeacher().getTeacherId()) {
+                        teacherComboBox.setSelectedIndex(i);
+                        break;
+                    }
+                }
+            }
+            
+            // Set selected class if exists
+            if (course.getSchoolClass() != null) {
+                for (int i = 0; i < classComboBox.getItemCount(); i++) {
+                    SchoolClass item = classComboBox.getItemAt(i);
+                    if (item != null && item.getClassId() == course.getSchoolClass().getClassId()) {
+                        classComboBox.setSelectedIndex(i);
+                        break;
+                    }
+                }
+            }
         }
 
         okButton.addActionListener(e -> {
@@ -81,7 +124,8 @@ public class CourseFormDialog extends JDialog {
         }
         course.setCourseCode(codeField.getText().trim());
         course.setCourseName(nameField.getText().trim());
-        course.setInstructor(instructorField.getText().trim());
+        course.setTeacher((Teacher) teacherComboBox.getSelectedItem());
+        course.setSchoolClass((SchoolClass) classComboBox.getSelectedItem());
         course.setCredits(Integer.parseInt(creditsField.getText().trim()));
         return course;
     }

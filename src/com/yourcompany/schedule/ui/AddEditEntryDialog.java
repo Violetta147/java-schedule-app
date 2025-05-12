@@ -4,22 +4,20 @@ import com.yourcompany.schedule.model.Course;
 import com.yourcompany.schedule.model.Room;
 import com.yourcompany.schedule.model.ScheduleEntry;
 import com.github.lgooddatepicker.components.DateTimePicker;
+import com.github.lgooddatepicker.components.DatePickerSettings;
+import com.github.lgooddatepicker.components.TimePickerSettings;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
-import java.util.Date;
-import java.text.SimpleDateFormat;
-import javax.swing.SpinnerDateModel;
 
 public class AddEditEntryDialog extends JDialog {
     private JComboBox<Course> courseCombo;
     private JComboBox<Room> roomCombo;
-    private JComboBox<DayOfWeek> dayCombo;
     private DateTimePicker startDateTimePicker;
     private DateTimePicker endDateTimePicker;
     private boolean confirmed = false;
@@ -31,9 +29,9 @@ public class AddEditEntryDialog extends JDialog {
     public AddEditEntryDialog(JFrame parent, List<Course> courses, List<Room> rooms, ScheduleEntry entry) {
         super(parent, true);
         setTitle(entry == null ? "Add Schedule Entry" : "Edit Schedule Entry");
-        setSize(400, 300);
+        setSize(450, 250);
         setLocationRelativeTo(parent);
-        setLayout(new GridLayout(6, 2, 5, 5));
+        setLayout(new GridLayout(5, 2, 5, 5));
 
         add(new JLabel("Course:"));
         courseField = new JTextField();
@@ -53,16 +51,22 @@ public class AddEditEntryDialog extends JDialog {
         roomPanel.add(selectRoomButton, BorderLayout.EAST);
         add(roomPanel);
 
-        add(new JLabel("Day of Week:"));
-        dayCombo = new JComboBox<>(DayOfWeek.values());
-        add(dayCombo);
-
+        // Configure date-time pickers with current date
+        DatePickerSettings dateSettings = new DatePickerSettings();
+        dateSettings.setAllowEmptyDates(false);
+        TimePickerSettings timeSettings = new TimePickerSettings();
+        timeSettings.setAllowEmptyTimes(false);
+        
         add(new JLabel("Start Date & Time:"));
-        startDateTimePicker = new DateTimePicker();
+        startDateTimePicker = new DateTimePicker(dateSettings, timeSettings);
+        startDateTimePicker.setDateTimePermissive(LocalDateTime.now());
         add(startDateTimePicker);
 
         add(new JLabel("End Date & Time:"));
-        endDateTimePicker = new DateTimePicker();
+        TimePickerSettings endTimeSettings = new TimePickerSettings();
+        endTimeSettings.setAllowEmptyTimes(false);
+        endDateTimePicker = new DateTimePicker(dateSettings.copySettings(), endTimeSettings);
+        endDateTimePicker.setDateTimePermissive(LocalDateTime.now().plusHours(1));
         add(endDateTimePicker);
 
         JButton okButton = new JButton("OK");
@@ -102,13 +106,47 @@ public class AddEditEntryDialog extends JDialog {
         });
 
         okButton.addActionListener((ActionEvent e) -> {
-            confirmed = true;
-            setVisible(false);
+            if (validateInputs()) {
+                confirmed = true;
+                setVisible(false);
+            }
         });
         cancelButton.addActionListener((ActionEvent e) -> {
             confirmed = false;
             setVisible(false);
         });
+    }
+    
+    private boolean validateInputs() {
+        if (selectedCourse == null) {
+            JOptionPane.showMessageDialog(this, "Please select a course", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (selectedRoom == null) {
+            JOptionPane.showMessageDialog(this, "Please select a room", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        LocalDateTime start = startDateTimePicker.getDateTimePermissive();
+        LocalDateTime end = endDateTimePicker.getDateTimePermissive();
+        
+        if (start == null) {
+            JOptionPane.showMessageDialog(this, "Please select a start date and time", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (end == null) {
+            JOptionPane.showMessageDialog(this, "Please select an end date and time", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        if (end.isBefore(start) || end.equals(start)) {
+            JOptionPane.showMessageDialog(this, "End time must be after start time", "Validation Error", JOptionPane.ERROR_MESSAGE);
+            return false;
+        }
+        
+        return true;
     }
 
     public boolean isConfirmed() {

@@ -5,15 +5,20 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseConnector {
-    private static final String URL = "jdbc:mysql://localhost:3306/java";
-    private static final String USER = "root";
-    private static final String PASSWORD = ""; // Change as needed
+    private static final String URL = "jdbc:mysql://localhost:3306/schedule_db";
+    private static final String USER = "java";
+    private static final String PASSWORD = "Vuongtuenhi15052005!";
 
     private Connection connection;
 
     public Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
-            connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            try {
+                connection = DriverManager.getConnection(URL, USER, PASSWORD);
+            } catch (SQLException e) {
+                // If the database doesn't exist yet, connect to MySQL without a specific database
+                connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/", USER, PASSWORD);
+            }
         }
         return connection;
     }
