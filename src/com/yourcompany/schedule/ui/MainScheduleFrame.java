@@ -26,7 +26,7 @@ public class MainScheduleFrame extends JFrame {
     private TimetablePanel timetablePanel;
     private JLabel weekLabel;
     private DateTimeFormatter weekFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-
+    
     public MainScheduleFrame() {
         setTitle("Schedule Manager");
         setSize(800, 600);

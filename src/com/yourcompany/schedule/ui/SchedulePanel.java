@@ -53,25 +53,40 @@ public class SchedulePanel extends JPanel {
         }
         
         // Add filter panel
-        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel filterPanel = new JPanel(new BorderLayout());
+        JPanel filterControlsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 5));
         
         // Add week filter checkbox
         weekFilterCheckBox = new JCheckBox("Current Week Only");
         weekFilterCheckBox.addActionListener(e -> applyFilter());
-        filterPanel.add(weekFilterCheckBox);
+        filterControlsPanel.add(weekFilterCheckBox);
         
-        filterPanel.add(new JLabel("Filter by:"));
+        // Add separator
+        filterControlsPanel.add(new JSeparator(JSeparator.VERTICAL) {
+            @Override
+            public Dimension getPreferredSize() {
+                return new Dimension(1, 20);
+            }
+        });
+        
+        filterControlsPanel.add(new JLabel("Filter by:"));
         
         // Create column filter dropdown
         filterColumnComboBox = new JComboBox<>(new String[]{"All Columns", "Course", "Teacher", "Class", "Room", "Date"});
-        filterPanel.add(filterColumnComboBox);
+        filterControlsPanel.add(filterColumnComboBox);
         
-        filterPanel.add(new JLabel("Search:"));
+        filterControlsPanel.add(new JLabel("Search:"));
         filterField = new JTextField(20);
-        filterPanel.add(filterField);
+        filterControlsPanel.add(filterField);
         
         JButton clearFilterButton = new JButton("Clear");
-        filterPanel.add(clearFilterButton);
+        clearFilterButton.setToolTipText("Clear all filters");
+        filterControlsPanel.add(clearFilterButton);
+        
+        filterPanel.add(filterControlsPanel, BorderLayout.CENTER);
+        
+        // Add a border with title
+        filterPanel.setBorder(BorderFactory.createTitledBorder("Filters"));
         
         add(filterPanel, BorderLayout.NORTH);
         
@@ -199,7 +214,24 @@ public class SchedulePanel extends JPanel {
         if (viewRow < 0) {
             return -1;
         }
-        return table.convertRowIndexToModel(viewRow);
+        
+        // Convert view row to model row
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        return modelRow;
+    }
+
+    public ScheduleEntry getSelectedEntry() {
+        int viewRow = table.getSelectedRow();
+        if (viewRow < 0) {
+            return null;
+        }
+        
+        // Convert view row to model row
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow >= 0 && modelRow < allEntries.size()) {
+            return allEntries.get(modelRow);
+        }
+        return null;
     }
 
     public void clearTable() {

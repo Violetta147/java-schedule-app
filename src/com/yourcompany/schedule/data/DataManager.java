@@ -157,11 +157,11 @@ public class DataManager {
             if (rs.next() && rs.getInt(1) == 0) {
                 // Insert sample teachers
                 String insertSQL = "INSERT INTO teachers (name, email, phone_number) VALUES " +
-                                  "('Dr. Smith', 'smith@school.edu', '555-1234'), " +
-                                  "('Prof. Johnson', 'johnson@school.edu', '555-2345'), " +
-                                  "('Dr. Williams', 'williams@school.edu', '555-3456'), " +
-                                  "('Prof. Brown', 'brown@school.edu', '555-4567'), " +
-                                  "('Dr. Davis', 'davis@school.edu', '555-5678')";
+                                  "('Trinh Minh Dat', 'dat123@gmail.com', '1234432156'), " +
+                                  "('Le Quang Anh Khoa', 'khoa321@gmail.com', '0796643288'), " +
+                                  "('Ha Minh Khoa', 'khoahalo@gmail.com', '0796643288'), " +
+                                  "('Ha Duc Kien', 'kiencntt@gmail.com', '0796643288'), " +
+                                  "('Bien Cao Cuong', 'biencaocuong69@gmail.com', '0796643288')";
                 
                 try (Statement insertStmt = conn.createStatement()) {
                     insertStmt.executeUpdate(insertSQL);
