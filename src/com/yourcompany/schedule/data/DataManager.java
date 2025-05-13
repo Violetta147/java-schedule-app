@@ -25,11 +25,6 @@ public class DataManager {
      */
     public void initializeDatabase() {
         try (Connection conn = connector.getConnection()) {
-            // Create database if it doesn't exist
-            createDatabase(conn);
-            
-            // Use the correct database
-            useDatabase(conn);
             
             // Create tables if they don't exist
             createTablesIfNotExist(conn);
@@ -41,18 +36,6 @@ public class DataManager {
         } catch (SQLException e) {
             System.err.println("Error initializing database: " + e.getMessage());
             e.printStackTrace();
-        }
-    }
-
-    private void createDatabase(Connection conn) throws SQLException {
-        try (Statement stmt = conn.createStatement()) {
-            stmt.executeUpdate("CREATE DATABASE IF NOT EXISTS schedule_db");
-        }
-    }
-
-    private void useDatabase(Connection conn) throws SQLException {
-        try (Statement stmt = conn.createStatement()) {
-            stmt.executeUpdate("USE schedule_db");
         }
     }
 
