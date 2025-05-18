@@ -2,14 +2,12 @@ package com.yourcompany.schedule.ui;
 
 import com.yourcompany.schedule.model.ScheduleEntry;
 import com.yourcompany.schedule.model.Course;
-import com.yourcompany.schedule.model.Room;
 
 import javax.swing.*;
 import java.awt.*;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;

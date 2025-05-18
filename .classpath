@@ -7,6 +7,6 @@
 	</classpathentry>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="lib" path="lib/mysql-connector-j-9.3.0.jar"/>
-	<classpathentry kind="lib" path="C:/Users/LAPTOP T&amp;T/VIOLETTA/Documents/MQF/StudyMaterial/Second year/4th Semester/JAVA/Code/Project/lib/LGoodDatePicker-11.2.1.jar"/>
+	<classpathentry kind="lib" path="lib/LGoodDatePicker-11.2.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -10,14 +10,10 @@ import com.github.lgooddatepicker.components.TimePickerSettings;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.time.LocalTime;
 import java.time.LocalDateTime;
-import java.time.LocalDate;
 import java.util.List;
 
 public class AddEditEntryDialog extends JDialog {
-    private JComboBox<Course> courseCombo;
-    private JComboBox<Room> roomCombo;
     private DateTimePicker startDateTimePicker;
     private DateTimePicker endDateTimePicker;
     private boolean confirmed = false;
