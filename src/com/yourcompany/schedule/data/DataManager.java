@@ -3,14 +3,12 @@ package com.yourcompany.schedule.data;
 import com.yourcompany.schedule.model.Course;
 import com.yourcompany.schedule.model.Room;
 import com.yourcompany.schedule.model.ScheduleEntry;
-import com.yourcompany.schedule.model.Schedule;
 import com.yourcompany.schedule.model.Teacher;
 import com.yourcompany.schedule.model.SchoolClass;
+import com.yourcompany.schedule.model.CourseOffering;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.DayOfWeek;
-import java.time.LocalTime;
 import java.time.LocalDateTime;
 
 public class DataManager {
@@ -60,6 +58,7 @@ public class DataManager {
         createTeachersTable(conn);
         createSchoolClassesTable(conn);
         createCoursesTable(conn);
+        createCourseOfferingsTable(conn);
         createRoomsTable(conn);
         createScheduleEntriesTable(conn);
     }
@@ -97,16 +96,28 @@ public class DataManager {
             "CREATE TABLE IF NOT EXISTS courses (" +
             "course_id INT AUTO_INCREMENT PRIMARY KEY, " +
             "course_code VARCHAR(20) NOT NULL, " +
-            "course_name VARCHAR(100) NOT NULL, " +
-            "teacher_id INT, " +
-            "class_id INT, " +
-            "credits INT DEFAULT 0, " +
-            "FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id) ON DELETE SET NULL, " +
-            "FOREIGN KEY (class_id) REFERENCES school_classes(class_id) ON DELETE SET NULL" +
+            "course_name VARCHAR(100) NOT NULL" +
             ")";
         
         try (Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(createTableSQL);
+        }
+    }
+
+    private void createCourseOfferingsTable(Connection conn) throws SQLException {
+        String sql =
+            "CREATE TABLE IF NOT EXISTS course_offerings (" +
+            "offering_id INT AUTO_INCREMENT PRIMARY KEY, " +
+            "course_id INT NOT NULL, " +
+            "class_id INT NOT NULL, " +
+            "teacher_id INT NOT NULL, " +
+            "UNIQUE KEY (course_id, class_id), " +
+            "FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE, " +
+            "FOREIGN KEY (class_id) REFERENCES school_classes(class_id) ON DELETE CASCADE, " +
+            "FOREIGN KEY (teacher_id) REFERENCES teachers(teacher_id) ON DELETE RESTRICT" +
+            ")";
+        try (Statement stmt = conn.createStatement()) { 
+            stmt.executeUpdate(sql); 
         }
     }
 
@@ -125,17 +136,16 @@ public class DataManager {
     }
 
     private void createScheduleEntriesTable(Connection conn) throws SQLException {
-        String createTableSQL = 
+        String createTableSQL =
             "CREATE TABLE IF NOT EXISTS schedule_entries (" +
             "entry_id INT AUTO_INCREMENT PRIMARY KEY, " +
-            "course_id INT NOT NULL, " +
+            "offering_id INT NOT NULL, " +
             "room_id INT NOT NULL, " +
             "start_datetime DATETIME NOT NULL, " +
             "end_datetime DATETIME NOT NULL, " +
-            "FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE, " +
-            "FOREIGN KEY (room_id) REFERENCES rooms(room_id) ON DELETE CASCADE" +
+            "FOREIGN KEY (offering_id) REFERENCES course_offerings(offering_id) ON DELETE CASCADE, " +
+            "FOREIGN KEY (room_id)     REFERENCES rooms(room_id)          ON DELETE CASCADE" +
             ")";
-        
         try (Statement stmt = conn.createStatement()) {
             stmt.executeUpdate(createTableSQL);
         }
@@ -145,6 +155,7 @@ public class DataManager {
         seedTeachersIfEmpty(conn);
         seedSchoolClassesIfEmpty(conn);
         seedCoursesIfEmpty(conn);
+        seedCourseOfferingsIfEmpty(conn);
         seedRoomsIfEmpty(conn);
         seedScheduleEntriesIfEmpty(conn);
     }
@@ -199,72 +210,50 @@ public class DataManager {
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(countQuery)) {
             if (rs.next() && rs.getInt(1) == 0) {
-                // Get teacher and class IDs
-                List<Integer> teacherIds = new ArrayList<>();
-                List<Integer> classIds = new ArrayList<>();
+                // Insert sample courses
+                String insertSQL = "INSERT INTO courses (course_code, course_name) VALUES " +
+                                  "('CS101', 'Introduction to Computer Science'), " +
+                                  "('MATH201', 'Calculus II'), " +
+                                  "('ENG105', 'Academic Writing'), " +
+                                  "('PHYS101', 'Physics I'), " +
+                                  "('BIO220', 'Molecular Biology')";
                 
-                try (Statement teacherStmt = conn.createStatement();
-                     ResultSet teacherRs = teacherStmt.executeQuery("SELECT teacher_id FROM teachers")) {
-                    while (teacherRs.next()) {
-                        teacherIds.add(teacherRs.getInt("teacher_id"));
-                    }
+                try (Statement insertStmt = conn.createStatement()) {
+                    insertStmt.executeUpdate(insertSQL);
+                    System.out.println("Sample courses added to database.");
                 }
-                
-                try (Statement classStmt = conn.createStatement();
-                     ResultSet classRs = classStmt.executeQuery("SELECT class_id FROM school_classes")) {
-                    while (classRs.next()) {
-                        classIds.add(classRs.getInt("class_id"));
-                    }
+            }
+        }
+    }
+
+    private void seedCourseOfferingsIfEmpty(Connection conn) throws SQLException {
+        String count = "SELECT COUNT(*) FROM course_offerings";
+        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(count)) {
+            if (rs.next() && rs.getInt(1) == 0) {
+                // example: assign all courses to first class and teacher
+                List<Integer> courseIds = new ArrayList<>();
+                List<Integer> classIds  = new ArrayList<>();
+                List<Integer> teacherIds= new ArrayList<>();
+                try (ResultSet crs = stmt.executeQuery("SELECT course_id FROM courses")) {
+                    while (crs.next()) courseIds.add(crs.getInt(1));
                 }
-                
-                // Only proceed if we have teachers and classes
-                if (!teacherIds.isEmpty() && !classIds.isEmpty()) {
-                    // Insert sample courses with teacher and class references
-                    String insertSQL = "INSERT INTO courses (course_code, course_name, teacher_id, class_id, credits) VALUES " +
-                                      "(?, ?, ?, ?, ?)";
-                    
-                    try (PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
-                        // Course 1: CS101 - Introduction to Computer Science
-                        pstmt.setString(1, "CS101");
-                        pstmt.setString(2, "Introduction to Computer Science");
-                        pstmt.setInt(3, teacherIds.get(0 % teacherIds.size()));
-                        pstmt.setInt(4, classIds.get(0 % classIds.size()));
-                        pstmt.setInt(5, 3);
-                        pstmt.executeUpdate();
-                        
-                        // Course 2: MATH201 - Calculus II
-                        pstmt.setString(1, "MATH201");
-                        pstmt.setString(2, "Calculus II");
-                        pstmt.setInt(3, teacherIds.get(1 % teacherIds.size()));
-                        pstmt.setInt(4, classIds.get(1 % classIds.size()));
-                        pstmt.setInt(5, 4);
-                        pstmt.executeUpdate();
-                        
-                        // Course 3: ENG105 - Academic Writing
-                        pstmt.setString(1, "ENG105");
-                        pstmt.setString(2, "Academic Writing");
-                        pstmt.setInt(3, teacherIds.get(2 % teacherIds.size()));
-                        pstmt.setInt(4, classIds.get(2 % classIds.size()));
-                        pstmt.setInt(5, 3);
-                        pstmt.executeUpdate();
-                        
-                        // Course 4: PHYS101 - Physics I
-                        pstmt.setString(1, "PHYS101");
-                        pstmt.setString(2, "Physics I");
-                        pstmt.setInt(3, teacherIds.get(3 % teacherIds.size()));
-                        pstmt.setInt(4, classIds.get(3 % classIds.size()));
-                        pstmt.setInt(5, 4);
-                        pstmt.executeUpdate();
-                        
-                        // Course 5: BIO220 - Molecular Biology
-                        pstmt.setString(1, "BIO220");
-                        pstmt.setString(2, "Molecular Biology");
-                        pstmt.setInt(3, teacherIds.get(4 % teacherIds.size()));
-                        pstmt.setInt(4, classIds.get(4 % classIds.size()));
-                        pstmt.setInt(5, 3);
-                        pstmt.executeUpdate();
-                        
-                        System.out.println("Sample courses added to database.");
+                try (ResultSet cls = stmt.executeQuery("SELECT class_id FROM school_classes")) {
+                    while (cls.next()) classIds.add(cls.getInt(1));
+                }
+                try (ResultSet trs = stmt.executeQuery("SELECT teacher_id FROM teachers")) {
+                    while (trs.next()) teacherIds.add(trs.getInt(1));
+                }
+                String insert = "INSERT INTO course_offerings (course_id, class_id, teacher_id) VALUES (?, ?, ?)";
+                try (PreparedStatement ps = conn.prepareStatement(insert)) {
+                    int idx=0;
+                    for (Integer cid : courseIds) {
+                        int clsId = classIds.get(idx % classIds.size());
+                        int tId   = teacherIds.get(idx % teacherIds.size());
+                        ps.setInt(1, cid);
+                        ps.setInt(2, clsId);
+                        ps.setInt(3, tId);
+                        ps.executeUpdate();
+                        idx++;
                     }
                 }
             }
@@ -299,14 +288,14 @@ public class DataManager {
         try (Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(countQuery)) {
             if (rs.next() && rs.getInt(1) == 0) {
-                // Get course and room IDs
-                List<Integer> courseIds = new ArrayList<>();
+                // Get offering and room IDs
+                List<Integer> offeringIds = new ArrayList<>();
                 List<Integer> roomIds = new ArrayList<>();
                 
-                try (Statement courseStmt = conn.createStatement();
-                     ResultSet courseRs = courseStmt.executeQuery("SELECT course_id FROM courses")) {
-                    while (courseRs.next()) {
-                        courseIds.add(courseRs.getInt("course_id"));
+                try (Statement offeringStmt = conn.createStatement();
+                     ResultSet offeringRs = offeringStmt.executeQuery("SELECT offering_id FROM course_offerings")) {
+                    while (offeringRs.next()) {
+                        offeringIds.add(offeringRs.getInt("offering_id"));
                     }
                 }
                 
@@ -317,39 +306,39 @@ public class DataManager {
                     }
                 }
                 
-                // Only proceed if we have courses and rooms
-                if (!courseIds.isEmpty() && !roomIds.isEmpty()) {
+                // Only proceed if we have offerings and rooms
+                if (!offeringIds.isEmpty() && !roomIds.isEmpty()) {
                     // Create some sample schedule entries
                     LocalDateTime now = LocalDateTime.now();
                     LocalDateTime tomorrow = now.plusDays(1);
                     
                     // Create prepared statement for inserting entries
-                    String insertSQL = "INSERT INTO schedule_entries (course_id, room_id, start_datetime, end_datetime) VALUES (?, ?, ?, ?)";
+                    String insertSQL = "INSERT INTO schedule_entries (offering_id, room_id, start_datetime, end_datetime) VALUES (?, ?, ?, ?)";
                     try (PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
                         
-                        // Entry 1: Course 1 in Room 1, today
-                        pstmt.setInt(1, courseIds.get(0));
+                        // Entry 1: Offering 1 in Room 1, today
+                        pstmt.setInt(1, offeringIds.get(0));
                         pstmt.setInt(2, roomIds.get(0));
                         pstmt.setTimestamp(3, Timestamp.valueOf(now.withHour(9).withMinute(0).withSecond(0)));
                         pstmt.setTimestamp(4, Timestamp.valueOf(now.withHour(10).withMinute(30).withSecond(0)));
                         pstmt.executeUpdate();
                         
-                        // Entry 2: Course 2 in Room 2, today
-                        pstmt.setInt(1, courseIds.get(1 % courseIds.size()));
+                        // Entry 2: Offering 2 in Room 2, today
+                        pstmt.setInt(1, offeringIds.get(1 % offeringIds.size()));
                         pstmt.setInt(2, roomIds.get(1 % roomIds.size()));
                         pstmt.setTimestamp(3, Timestamp.valueOf(now.withHour(11).withMinute(0).withSecond(0)));
                         pstmt.setTimestamp(4, Timestamp.valueOf(now.withHour(12).withMinute(30).withSecond(0)));
                         pstmt.executeUpdate();
                         
-                        // Entry 3: Course 3 in Room 3, tomorrow
-                        pstmt.setInt(1, courseIds.get(2 % courseIds.size()));
+                        // Entry 3: Offering 3 in Room 3, tomorrow
+                        pstmt.setInt(1, offeringIds.get(2 % offeringIds.size()));
                         pstmt.setInt(2, roomIds.get(2 % roomIds.size()));
                         pstmt.setTimestamp(3, Timestamp.valueOf(tomorrow.withHour(9).withMinute(0).withSecond(0)));
                         pstmt.setTimestamp(4, Timestamp.valueOf(tomorrow.withHour(10).withMinute(30).withSecond(0)));
                         pstmt.executeUpdate();
                         
-                        // Entry 4: Course 4 in Room 4, tomorrow
-                        pstmt.setInt(1, courseIds.get(3 % courseIds.size()));
+                        // Entry 4: Offering 4 in Room 4, tomorrow
+                        pstmt.setInt(1, offeringIds.get(3 % offeringIds.size()));
                         pstmt.setInt(2, roomIds.get(3 % roomIds.size()));
                         pstmt.setTimestamp(3, Timestamp.valueOf(tomorrow.withHour(11).withMinute(0).withSecond(0)));
                         pstmt.setTimestamp(4, Timestamp.valueOf(tomorrow.withHour(12).withMinute(30).withSecond(0)));
@@ -365,9 +354,6 @@ public class DataManager {
     // CRUD for Course
     public List<Course> getAllCourses() throws SQLException {
         List<Course> courses = new ArrayList<>();
-        List<Teacher> teachers = getAllTeachers();
-        List<SchoolClass> classes = getAllSchoolClasses();
-        
         String query = "SELECT * FROM courses";
         try (Connection conn = connector.getConnection();
              Statement stmt = conn.createStatement();
@@ -377,30 +363,6 @@ public class DataManager {
                 course.setCourseId(rs.getInt("course_id"));
                 course.setCourseCode(rs.getString("course_code"));
                 course.setCourseName(rs.getString("course_name"));
-                course.setCredits(rs.getInt("credits"));
-                
-                // Find and set the teacher
-                int teacherId = rs.getInt("teacher_id");
-                if (!rs.wasNull()) {
-                    for (Teacher teacher : teachers) {
-                        if (teacher.getTeacherId() == teacherId) {
-                            course.setTeacher(teacher);
-                            break;
-                        }
-                    }
-                }
-                
-                // Find and set the class
-                int classId = rs.getInt("class_id");
-                if (!rs.wasNull()) {
-                    for (SchoolClass schoolClass : classes) {
-                        if (schoolClass.getClassId() == classId) {
-                            course.setSchoolClass(schoolClass);
-                            break;
-                        }
-                    }
-                }
-                
                 courses.add(course);
             }
         }
@@ -408,27 +370,11 @@ public class DataManager {
     }
 
     public void addCourse(Course course) throws SQLException {
-        String query = "INSERT INTO courses (course_code, course_name, teacher_id, class_id, credits) VALUES (?, ?, ?, ?, ?)";
+        String query = "INSERT INTO courses (course_code, course_name) VALUES (?, ?)";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
             pstmt.setString(1, course.getCourseCode());
             pstmt.setString(2, course.getCourseName());
-            
-            // Set teacher_id
-            if (course.getTeacher() != null) {
-                pstmt.setInt(3, course.getTeacher().getTeacherId());
-            } else {
-                pstmt.setNull(3, java.sql.Types.INTEGER);
-            }
-            
-            // Set class_id
-            if (course.getSchoolClass() != null) {
-                pstmt.setInt(4, course.getSchoolClass().getClassId());
-            } else {
-                pstmt.setNull(4, java.sql.Types.INTEGER);
-            }
-            
-            pstmt.setInt(5, course.getCredits());
             pstmt.executeUpdate();
             try (ResultSet generatedKeys = pstmt.getGeneratedKeys()) {
                 if (generatedKeys.next()) {
@@ -439,38 +385,69 @@ public class DataManager {
     }
 
     public void updateCourse(Course course) throws SQLException {
-        String query = "UPDATE courses SET course_code=?, course_name=?, teacher_id=?, class_id=?, credits=? WHERE course_id=?";
+        String query = "UPDATE courses SET course_code=?, course_name=? WHERE course_id=?";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
             pstmt.setString(1, course.getCourseCode());
             pstmt.setString(2, course.getCourseName());
-            
-            // Set teacher_id
-            if (course.getTeacher() != null) {
-                pstmt.setInt(3, course.getTeacher().getTeacherId());
-            } else {
-                pstmt.setNull(3, java.sql.Types.INTEGER);
-            }
-            
-            // Set class_id
-            if (course.getSchoolClass() != null) {
-                pstmt.setInt(4, course.getSchoolClass().getClassId());
-            } else {
-                pstmt.setNull(4, java.sql.Types.INTEGER);
-            }
-            
-            pstmt.setInt(5, course.getCredits());
-            pstmt.setInt(6, course.getCourseId());
+            pstmt.setInt(3, course.getCourseId());
             pstmt.executeUpdate();
         }
     }
 
-    public void deleteCourse(int courseId) throws SQLException {
-        String query = "DELETE FROM courses WHERE course_id=?";
+    // CRUD for CourseOffering
+    public List<CourseOffering> getAllCourseOfferings() throws SQLException {
+        List<CourseOffering> list = new ArrayList<>();
+        String sql = "SELECT * FROM course_offerings";
+        List<Course> courses = getAllCourses();
+        List<SchoolClass> classes = getAllSchoolClasses();
+        List<Teacher> teachers = getAllTeachers();
         try (Connection conn = connector.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-            pstmt.setInt(1, courseId);
-            pstmt.executeUpdate();
+             Statement st = conn.createStatement();
+             ResultSet rs = st.executeQuery(sql)) {
+            while (rs.next()) {
+                CourseOffering off = new CourseOffering();
+                off.setOfferingId(rs.getInt("offering_id"));
+                int courseId = rs.getInt("course_id");
+                int classId = rs.getInt("class_id");
+                int teacherId = rs.getInt("teacher_id");
+                off.setCourse(courses.stream().filter(c->c.getCourseId()==courseId).findFirst().orElse(null));
+                off.setSchoolClass(classes.stream().filter(c->c.getClassId()==classId).findFirst().orElse(null));
+                off.setTeacher(teachers.stream().filter(t->t.getTeacherId()==teacherId).findFirst().orElse(null));
+                list.add(off);
+            }
+        }
+        return list;
+    }
+
+    public void addCourseOffering(CourseOffering off) throws SQLException {
+        String sql = "INSERT INTO course_offerings (course_id, class_id, teacher_id) VALUES (?,?,?)";
+        try (Connection conn = connector.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, off.getCourse().getCourseId());
+            ps.setInt(2, off.getSchoolClass().getClassId());
+            ps.setInt(3, off.getTeacher().getTeacherId());
+            ps.executeUpdate();
+            try (ResultSet gk = ps.getGeneratedKeys()) { if (gk.next()) off.setOfferingId(gk.getInt(1)); }
+        }
+    }
+
+    public void updateCourseOffering(CourseOffering off) throws SQLException {
+        String sql = "UPDATE course_offerings SET course_id=?, class_id=?, teacher_id=? WHERE offering_id=?";
+        try (Connection conn = connector.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, off.getCourse().getCourseId());
+            ps.setInt(2, off.getSchoolClass().getClassId());
+            ps.setInt(3, off.getTeacher().getTeacherId());
+            ps.setInt(4, off.getOfferingId());
+            ps.executeUpdate();
+        }
+    }
+
+    public void deleteCourseOffering(int id) throws SQLException {
+        String sql = "DELETE FROM course_offerings WHERE offering_id=?";
+        try (Connection conn = connector.getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, id);
+            ps.executeUpdate();
         }
     }
 
@@ -531,20 +508,20 @@ public class DataManager {
     }
 
     // CRUD for ScheduleEntry
-    public List<ScheduleEntry> getAllScheduleEntries(List<Course> courses, List<Room> rooms) throws SQLException {
+    public List<ScheduleEntry> getAllScheduleEntries(List<CourseOffering> offerings, List<Room> rooms) throws SQLException {
         List<ScheduleEntry> entries = new ArrayList<>();
         String query = "SELECT * FROM schedule_entries";
         try (Connection conn = connector.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(query)) {
             while (rs.next()) {
-                int courseId = rs.getInt("course_id");
+                int offId = rs.getInt("offering_id");
                 int roomId = rs.getInt("room_id");
-                Course course = courses.stream().filter(c -> c.getCourseId() == courseId).findFirst().orElse(null);
+                CourseOffering off = offerings.stream().filter(o -> o.getOfferingId() == offId).findFirst().orElse(null);
                 Room room = rooms.stream().filter(r -> r.getRoomId() == roomId).findFirst().orElse(null);
                 ScheduleEntry entry = new ScheduleEntry();
                 entry.setEntryId(rs.getInt("entry_id"));
-                entry.setCourse(course);
+                entry.setOffering(off);
                 entry.setRoom(room);
                 entry.setStartDateTime(rs.getTimestamp("start_datetime").toLocalDateTime());
                 entry.setEndDateTime(rs.getTimestamp("end_datetime").toLocalDateTime());
@@ -555,10 +532,10 @@ public class DataManager {
     }
 
     public void addScheduleEntry(ScheduleEntry entry) throws SQLException {
-        String query = "INSERT INTO schedule_entries (course_id, room_id, start_datetime, end_datetime) VALUES (?, ?, ?, ?)";
+        String query = "INSERT INTO schedule_entries (offering_id, room_id, start_datetime, end_datetime) VALUES (?, ?, ?, ?)";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
-            pstmt.setInt(1, entry.getCourse().getCourseId());
+            pstmt.setInt(1, entry.getOffering().getOfferingId());
             pstmt.setInt(2, entry.getRoom().getRoomId());
             pstmt.setTimestamp(3, java.sql.Timestamp.valueOf(entry.getStartDateTime()));
             pstmt.setTimestamp(4, java.sql.Timestamp.valueOf(entry.getEndDateTime()));
@@ -572,10 +549,10 @@ public class DataManager {
     }
 
     public void updateScheduleEntry(ScheduleEntry entry) throws SQLException {
-        String query = "UPDATE schedule_entries SET course_id=?, room_id=?, start_datetime=?, end_datetime=? WHERE entry_id=?";
+        String query = "UPDATE schedule_entries SET offering_id=?, room_id=?, start_datetime=?, end_datetime=? WHERE entry_id=?";
         try (Connection conn = connector.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
-            pstmt.setInt(1, entry.getCourse().getCourseId());
+            pstmt.setInt(1, entry.getOffering().getOfferingId());
             pstmt.setInt(2, entry.getRoom().getRoomId());
             pstmt.setTimestamp(3, java.sql.Timestamp.valueOf(entry.getStartDateTime()));
             pstmt.setTimestamp(4, java.sql.Timestamp.valueOf(entry.getEndDateTime()));
@@ -704,4 +681,4 @@ public class DataManager {
             pstmt.executeUpdate();
         }
     }
-} 
+}

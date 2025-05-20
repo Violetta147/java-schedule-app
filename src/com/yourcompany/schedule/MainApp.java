@@ -1,6 +1,6 @@
 package com.yourcompany.schedule;
 
-import com.yourcompany.schedule.ui.MainScheduleFrame;
+import com.yourcompany.schedule.ui.frames.MainScheduleFrame;
 import javax.swing.SwingUtilities;
 
 public class MainApp {
