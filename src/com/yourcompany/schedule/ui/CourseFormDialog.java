@@ -1,116 +1,111 @@
 package com.yourcompany.schedule.ui;
 
 import com.yourcompany.schedule.model.Course;
-import com.yourcompany.schedule.model.Teacher;
-import com.yourcompany.schedule.model.SchoolClass;
+// import com.yourcompany.schedule.model.Teacher; // Không cần nữa
+// import com.yourcompany.schedule.model.SchoolClass; // Không cần nữa
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.List;
+// import java.util.List; // Không cần nữa
+import java.util.Optional; // Sử dụng Optional cho phương thức showDialog tĩnh
 
 public class CourseFormDialog extends JDialog {
-    private JTextField codeField, nameField, creditsField;
-    private JComboBox<Teacher> teacherComboBox;
-    private JComboBox<SchoolClass> classComboBox;
+    private JTextField codeField;
+    private JTextField nameField;
+    // private JTextField creditsField; // ĐÃ LOẠI BỎ
+    // private JComboBox<Teacher> teacherComboBox; // ĐÃ LOẠI BỎ
+    // private JComboBox<SchoolClass> classComboBox; // ĐÃ LOẠI BỎ
+
     private boolean confirmed = false;
-    private Course course;
-    private List<Teacher> teachers;
-    private List<SchoolClass> classes;
+    private Course courseToEdit; // Đối tượng Course được truyền vào để chỉnh sửa
 
-    public CourseFormDialog(JFrame parent, Course course, List<Teacher> teachers, List<SchoolClass> classes) {
-        super(parent, course == null ? "Add Course" : "Edit Course", true);
-        this.course = course;
-        this.teachers = teachers;
-        this.classes = classes;
-        
-        setSize(400, 300);
+    // Constructor được đơn giản hóa
+    public CourseFormDialog(Frame parent, Course course) { // Thay JFrame bằng Frame
+        super(parent, course == null ? "Thêm Môn Học" : "Chỉnh Sửa Môn Học", true);
+        this.courseToEdit = course;
+
+        initComponents();
+        populateFieldsIfEditing();
+
+        pack(); // Tự điều chỉnh kích thước
+        setMinimumSize(new Dimension(350, 180)); // Kích thước tối thiểu
         setLocationRelativeTo(parent);
-        setLayout(new GridLayout(6, 2, 5, 5));
+        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+    }
 
-        add(new JLabel("Course Code:"));
-        codeField = new JTextField();
-        add(codeField);
+    private void initComponents() {
+        setLayout(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        add(new JLabel("Course Name:"));
-        nameField = new JTextField();
-        add(nameField);
+        // Course Code
+        gbc.gridx = 0; gbc.gridy = 0; gbc.anchor = GridBagConstraints.EAST;
+        add(new JLabel("Mã Môn Học:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 0; gbc.weightx = 1.0; gbc.anchor = GridBagConstraints.WEST;
+        codeField = new JTextField(15); add(codeField, gbc);
+        gbc.weightx = 0;
 
-        add(new JLabel("Teacher:"));
-        teacherComboBox = new JComboBox<>();
-        teacherComboBox.addItem(null); // Add empty option
-        for (Teacher teacher : teachers) {
-            teacherComboBox.addItem(teacher);
-        }
-        add(teacherComboBox);
+        // Course Name
+        gbc.gridx = 0; gbc.gridy = 1; gbc.anchor = GridBagConstraints.EAST;
+        add(new JLabel("Tên Môn Học:"), gbc);
+        gbc.gridx = 1; gbc.gridy = 1; gbc.weightx = 1.0; gbc.anchor = GridBagConstraints.WEST;
+        nameField = new JTextField(25); add(nameField, gbc);
+        gbc.weightx = 0;
 
-        add(new JLabel("Class:"));
-        classComboBox = new JComboBox<>();
-        classComboBox.addItem(null); // Add empty option
-        for (SchoolClass schoolClass : classes) {
-            classComboBox.addItem(schoolClass);
-        }
-        add(classComboBox);
+        // Teacher, Class, Credits fields đã được loại bỏ
 
-        add(new JLabel("Credits:"));
-        creditsField = new JTextField();
-        add(creditsField);
+        // Button Panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton okButton = new JButton("Lưu");
+        JButton cancelButton = new JButton("Hủy");
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
 
-        JButton okButton = new JButton("OK");
-        JButton cancelButton = new JButton("Cancel");
-        add(okButton);
-        add(cancelButton);
-
-        if (course != null) {
-            codeField.setText(course.getCourseCode());
-            nameField.setText(course.getCourseName());
-            creditsField.setText(String.valueOf(course.getCredits()));
-            
-            // Set selected teacher if exists
-            if (course.getTeacher() != null) {
-                for (int i = 0; i < teacherComboBox.getItemCount(); i++) {
-                    Teacher item = teacherComboBox.getItemAt(i);
-                    if (item != null && item.getTeacherId() == course.getTeacher().getTeacherId()) {
-                        teacherComboBox.setSelectedIndex(i);
-                        break;
-                    }
-                }
-            }
-            
-            // Set selected class if exists
-            if (course.getSchoolClass() != null) {
-                for (int i = 0; i < classComboBox.getItemCount(); i++) {
-                    SchoolClass item = classComboBox.getItemAt(i);
-                    if (item != null && item.getClassId() == course.getSchoolClass().getClassId()) {
-                        classComboBox.setSelectedIndex(i);
-                        break;
-                    }
-                }
-            }
-        }
+        gbc.gridx = 0; gbc.gridy = 2; // Dòng tiếp theo
+        gbc.gridwidth = 2; // Chiếm 2 cột
+        gbc.anchor = GridBagConstraints.CENTER;
+        gbc.fill = GridBagConstraints.NONE;
+        add(buttonPanel, gbc);
 
         okButton.addActionListener(e -> {
-            if (validateFields()) {
+            if (validateInput()) {
                 confirmed = true;
                 setVisible(false);
+                dispose();
             }
         });
         cancelButton.addActionListener(e -> {
             confirmed = false;
             setVisible(false);
+            dispose();
         });
     }
 
-    private boolean validateFields() {
-        if (codeField.getText().trim().isEmpty() || nameField.getText().trim().isEmpty() || creditsField.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Please fill in all required fields.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+    private void populateFieldsIfEditing() {
+        if (courseToEdit != null) {
+            codeField.setText(courseToEdit.getCourseCode());
+            nameField.setText(courseToEdit.getCourseName());
+            // creditsField.setText(String.valueOf(courseToEdit.getCredits())); // LOẠI BỎ
+            // Không còn set teacherComboBox và classComboBox
+        }
+    }
+
+    private boolean validateInput() {
+        String courseCode = codeField.getText().trim();
+        String courseName = nameField.getText().trim();
+
+        if (courseCode.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Mã môn học không được để trống.", "Lỗi Nhập Liệu", JOptionPane.ERROR_MESSAGE);
+            codeField.requestFocusInWindow();
             return false;
         }
-        try {
-            Integer.parseInt(creditsField.getText().trim());
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Credits must be a number.", "Validation Error", JOptionPane.WARNING_MESSAGE);
+        if (courseName.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Tên môn học không được để trống.", "Lỗi Nhập Liệu", JOptionPane.ERROR_MESSAGE);
+            nameField.requestFocusInWindow();
             return false;
         }
+        // Không còn validate credits
         return true;
     }
 
@@ -118,15 +113,41 @@ public class CourseFormDialog extends JDialog {
         return confirmed;
     }
 
-    public Course getCourse() {
-        if (course == null) {
-            course = new Course();
+    /**
+     * Trả về đối tượng Course với dữ liệu từ form.
+     * Nếu là form edit, nó sẽ cập nhật courseToEdit.
+     * Nếu là form add, nó sẽ tạo một Course mới.
+     * @return Course object, hoặc null nếu không confirmed.
+     */
+    public Course getCourseData() {
+        if (!confirmed) {
+            return null;
         }
-        course.setCourseCode(codeField.getText().trim());
-        course.setCourseName(nameField.getText().trim());
-        course.setTeacher((Teacher) teacherComboBox.getSelectedItem());
-        course.setSchoolClass((SchoolClass) classComboBox.getSelectedItem());
-        course.setCredits(Integer.parseInt(creditsField.getText().trim()));
-        return course;
+
+        Course resultCourse = (courseToEdit == null) ? new Course() : courseToEdit;
+        
+        resultCourse.setCourseCode(codeField.getText().trim());
+        resultCourse.setCourseName(nameField.getText().trim());
+        // Không còn setTeacher, setSchoolClass, setCredits
+
+        // Nếu là thêm mới, ID của resultCourse sẽ là 0 (hoặc giá trị mặc định).
+        // DataManager sẽ xử lý việc gán ID từ DB sau khi thêm.
+        // Nếu là edit, resultCourse (chính là courseToEdit) đã có ID.
+        return resultCourse;
     }
-} 
+
+    /**
+     * Phương thức tiện ích để hiển thị dialog và trả về môn học đã được tạo/chỉnh sửa.
+     * @param parent Frame cha.
+     * @param courseToEdit Course cần chỉnh sửa, hoặc null nếu muốn thêm mới.
+     * @return Optional chứa Course đã tạo/chỉnh sửa, hoặc Optional.empty() nếu người dùng hủy.
+     */
+    public static Optional<Course> showDialog(Frame parent, Course courseToEdit) {
+        CourseFormDialog dialog = new CourseFormDialog(parent, courseToEdit);
+        dialog.setVisible(true); // Lệnh này sẽ block cho đến khi dialog đóng
+        if (dialog.isConfirmed()) {
+            return Optional.ofNullable(dialog.getCourseData());
+        }
+        return Optional.empty();
+    }
+}

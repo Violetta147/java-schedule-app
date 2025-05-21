@@ -44,4 +44,9 @@ public class CourseOffering {
         String teacherName = teacher != null ? teacher.getName() : "N/A";
         return "Offering ID: " + offeringId + " (Course: " + courseName + ", Teacher: " + teacherName + ")";
     }
+
+	public AcaYear getAcademicYear() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }

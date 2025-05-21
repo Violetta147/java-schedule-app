@@ -1,185 +1,164 @@
 package com.yourcompany.schedule.ui;
 
-import com.yourcompany.schedule.data.DataManager;
 import com.yourcompany.schedule.model.SchoolClass;
+import com.yourcompany.schedule.service.ScheduleService;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 public class ManageClassesDialog extends JDialog {
+    private ScheduleService scheduleService;
     private JTable classTable;
     private DefaultTableModel tableModel;
-    private DataManager dataManager;
-    private List<SchoolClass> classes;
-    private JTextField nameField;
-    private JSpinner gradeSpinner;
-    private JTextField sectionField;
-    private JButton addButton;
-    private JButton updateButton;
-    private JButton deleteButton;
-    private JButton closeButton;
-    private int selectedRow = -1;
+    private List<SchoolClass> currentClassesList;
 
-    public ManageClassesDialog(JFrame parent, DataManager dataManager) {
-        super(parent, "Manage Classes", true);
-        this.dataManager = dataManager;
-        setSize(600, 400);
+    public ManageClassesDialog(Frame parent, ScheduleService scheduleService) {
+        super(parent, "Quản Lý Lớp Học", true);
+        this.scheduleService = scheduleService;
+        this.currentClassesList = new ArrayList<>();
+
+        initComponents();
+        loadInitialClasses();
+
+        pack();
+        setMinimumSize(new Dimension(550, 400)); // Điều chỉnh kích thước nếu cần
         setLocationRelativeTo(parent);
-        setLayout(new BorderLayout());
+        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+    }
 
-        // Create table model
-        String[] columns = {"ID", "Name", "Grade", "Section"};
-        tableModel = new DefaultTableModel(columns, 0) {
+    private void initComponents() {
+        setLayout(new BorderLayout(10, 10));
+        ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        tableModel = new DefaultTableModel(new Object[]{"ID", "Tên Lớp", "Khối", "Ban/Số TT"}, 0) {
             @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
+            public boolean isCellEditable(int row, int column) { return false; }
         };
         classTable = new JTable(tableModel);
         classTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        JScrollPane scrollPane = new JScrollPane(classTable);
-        add(scrollPane, BorderLayout.CENTER);
+        classTable.setAutoCreateRowSorter(true);
 
-        // Create form panel
-        JPanel formPanel = new JPanel(new GridLayout(3, 2, 5, 5));
-        formPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        formPanel.add(new JLabel("Name:"));
-        nameField = new JTextField();
-        formPanel.add(nameField);
-        formPanel.add(new JLabel("Grade:"));
-        gradeSpinner = new JSpinner(new SpinnerNumberModel(10, 1, 12, 1));
-        formPanel.add(gradeSpinner);
-        formPanel.add(new JLabel("Section:"));
-        sectionField = new JTextField();
-        formPanel.add(sectionField);
-        add(formPanel, BorderLayout.NORTH);
+        classTable.getColumnModel().getColumn(0).setPreferredWidth(50);
+        classTable.getColumnModel().getColumn(0).setMaxWidth(70);
+        classTable.getColumnModel().getColumn(1).setPreferredWidth(150); // Tên lớp
+        classTable.getColumnModel().getColumn(2).setPreferredWidth(80);  // Khối
+        classTable.getColumnModel().getColumn(3).setPreferredWidth(120); // Ban
 
-        // Create button panel
-        JPanel buttonPanel = new JPanel();
-        addButton = new JButton("Add");
-        updateButton = new JButton("Update");
-        deleteButton = new JButton("Delete");
-        closeButton = new JButton("Close");
+        add(new JScrollPane(classTable), BorderLayout.CENTER);
+
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        JButton addButton = new JButton("Thêm Mới");
+        JButton editButton = new JButton("Chỉnh Sửa");
+        JButton deleteButton = new JButton("Xóa");
+        JButton closeButton = new JButton("Đóng");
+
         buttonPanel.add(addButton);
-        buttonPanel.add(updateButton);
+        buttonPanel.add(editButton);
         buttonPanel.add(deleteButton);
         buttonPanel.add(closeButton);
         add(buttonPanel, BorderLayout.SOUTH);
 
-        // Load data
-        loadData();
+        addButton.addActionListener(this::addClassAction);
+        editButton.addActionListener(this::editClassAction);
+        deleteButton.addActionListener(this::deleteClassAction);
+        closeButton.addActionListener(e -> dispose());
+    }
 
-        // Add event listeners
-        classTable.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                selectedRow = classTable.getSelectedRow();
-                if (selectedRow >= 0 && selectedRow < classes.size()) {
-                    SchoolClass schoolClass = classes.get(selectedRow);
-                    nameField.setText(schoolClass.getName());
-                    gradeSpinner.setValue(schoolClass.getGrade());
-                    sectionField.setText(schoolClass.getSection());
-                }
+    private void loadInitialClasses() {
+        tableModel.setRowCount(0);
+        currentClassesList.clear();
+        List<SchoolClass> classes = scheduleService.getAllSchoolClasses();
+        if (classes != null) {
+            currentClassesList.addAll(classes);
+            for (SchoolClass sc : currentClassesList) {
+                tableModel.addRow(new Object[]{
+                        sc.getClassId(),
+                        sc.getName(), // name được suy ra từ grade và section
+                        sc.getGrade(),
+                        sc.getSection()
+                });
             }
-        });
+        } else {
+            JOptionPane.showMessageDialog(this, "Không thể tải danh sách lớp học.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+        }
+    }
 
-        addButton.addActionListener((ActionEvent e) -> {
-            if (validateInputs()) {
-                try {
-                    SchoolClass schoolClass = new SchoolClass();
-                    schoolClass.setName(nameField.getText().trim());
-                    schoolClass.setGrade((Integer) gradeSpinner.getValue());
-                    schoolClass.setSection(sectionField.getText().trim());
-                    dataManager.addSchoolClass(schoolClass);
-                    clearFields();
-                    loadData();
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(this, "Error adding class: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-
-        updateButton.addActionListener((ActionEvent e) -> {
-            if (selectedRow >= 0 && selectedRow < classes.size() && validateInputs()) {
-                try {
-                    SchoolClass schoolClass = classes.get(selectedRow);
-                    schoolClass.setName(nameField.getText().trim());
-                    schoolClass.setGrade((Integer) gradeSpinner.getValue());
-                    schoolClass.setSection(sectionField.getText().trim());
-                    dataManager.updateSchoolClass(schoolClass);
-                    clearFields();
-                    loadData();
-                    selectedRow = -1;
-                } catch (SQLException ex) {
-                    JOptionPane.showMessageDialog(this, "Error updating class: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                }
+    private void addClassAction(ActionEvent e) {
+        Optional<SchoolClass> classDataOpt = SchoolClassFormDialog.showDialog((Frame) getParent(), null);
+        if (classDataOpt.isPresent()) {
+            SchoolClass newClass = classDataOpt.get();
+            Optional<SchoolClass> addedClassOpt = scheduleService.addSchoolClass(newClass);
+            if (addedClassOpt.isPresent()) {
+                JOptionPane.showMessageDialog(this, "Thêm lớp học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                loadInitialClasses();
             } else {
-                JOptionPane.showMessageDialog(this, "Please select a class to update.", "Warning", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Lỗi khi thêm lớp học.\nCó thể lớp với Khối và Ban/Số Thứ Tự này đã tồn tại.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
-        });
+        }
+    }
 
-        deleteButton.addActionListener((ActionEvent e) -> {
-            if (selectedRow >= 0 && selectedRow < classes.size()) {
-                int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to delete this class?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    try {
-                        dataManager.deleteSchoolClass(classes.get(selectedRow).getClassId());
-                        clearFields();
-                        loadData();
-                        selectedRow = -1;
-                    } catch (SQLException ex) {
-                        JOptionPane.showMessageDialog(this, "Error deleting class: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    }
-                }
+    private void editClassAction(ActionEvent e) {
+        int viewRow = classTable.getSelectedRow();
+        if (viewRow < 0) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một lớp học để chỉnh sửa.", "Thông Báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int modelRow = classTable.convertRowIndexToModel(viewRow);
+        if (modelRow < 0 || modelRow >= currentClassesList.size()){ // Kiểm tra modelRow hợp lệ
+             JOptionPane.showMessageDialog(this, "Lựa chọn không hợp lệ trên bảng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        SchoolClass classToEdit = currentClassesList.get(modelRow);
+
+        // Tạo bản sao để truyền vào dialog, tránh thay đổi trực tiếp nếu người dùng hủy
+        SchoolClass classCopy = new SchoolClass(classToEdit.getClassId(), classToEdit.getGrade(), classToEdit.getSection());
+        // classCopy.setName(classToEdit.getName()); // Không cần thiết vì name được suy ra
+
+        Optional<SchoolClass> updatedDataOpt = SchoolClassFormDialog.showDialog((Frame) getParent(), classCopy);
+        if (updatedDataOpt.isPresent()) {
+            SchoolClass updatedClass = updatedDataOpt.get(); // Đây là classCopy đã được cập nhật
+            boolean success = scheduleService.updateSchoolClass(updatedClass);
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Cập nhật lớp học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                loadInitialClasses();
             } else {
-                JOptionPane.showMessageDialog(this, "Please select a class to delete.", "Warning", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(this, "Lỗi khi cập nhật lớp học.\nCó thể lớp với Khối và Ban/Số Thứ Tự mới đã tồn tại.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
-        });
-
-        closeButton.addActionListener((ActionEvent e) -> {
-            dispose();
-        });
+        }
     }
 
-    private void loadData() {
-        try {
-            classes = dataManager.getAllSchoolClasses();
-            tableModel.setRowCount(0);
-            for (SchoolClass schoolClass : classes) {
-                Object[] row = {
-                    schoolClass.getClassId(),
-                    schoolClass.getName(),
-                    schoolClass.getGrade(),
-                    schoolClass.getSection()
-                };
-                tableModel.addRow(row);
+    private void deleteClassAction(ActionEvent e) {
+        int viewRow = classTable.getSelectedRow();
+        if (viewRow < 0) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một lớp học để xóa.", "Thông Báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        int modelRow = classTable.convertRowIndexToModel(viewRow);
+         if (modelRow < 0 || modelRow >= currentClassesList.size()){
+             JOptionPane.showMessageDialog(this, "Lựa chọn không hợp lệ trên bảng.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        SchoolClass classToDelete = currentClassesList.get(modelRow);
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có chắc chắn muốn xóa lớp: " + classToDelete.getName() + "?\n" +
+                "(Lưu ý: Giáo viên chủ nhiệm của lớp này (nếu có) sẽ không còn chủ nhiệm lớp này nữa.\n" +
+                "Tất cả các lịch học của lớp này cũng sẽ bị xóa.)",
+                "Xác Nhận Xóa", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            boolean success = scheduleService.deleteSchoolClass(classToDelete.getClassId());
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Xóa lớp học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                loadInitialClasses();
+            } else {
+                JOptionPane.showMessageDialog(this, "Lỗi khi xóa lớp học. Vui lòng kiểm tra log.", "Lỗi", JOptionPane.ERROR_MESSAGE);
             }
-        } catch (SQLException ex) {
-            JOptionPane.showMessageDialog(this, "Error loading classes: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
-
-    private void clearFields() {
-        nameField.setText("");
-        gradeSpinner.setValue(10);
-        sectionField.setText("");
-    }
-
-    private boolean validateInputs() {
-        if (nameField.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Class name is required.", "Validation Error", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-        if (sectionField.getText().trim().isEmpty()) {
-            JOptionPane.showMessageDialog(this, "Section is required.", "Validation Error", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-        return true;
-    }
-} 
+}

@@ -1,287 +1,454 @@
 package com.yourcompany.schedule.ui;
 
+import com.yourcompany.schedule.model.*;
+import com.yourcompany.schedule.service.ScheduleService;
+
 import javax.swing.*;
-import java.awt.BorderLayout;
-import java.awt.FlowLayout;
-import java.awt.Font;
-import com.yourcompany.schedule.data.DataManager;
-import com.yourcompany.schedule.model.Course;
-import com.yourcompany.schedule.model.Room;
-import com.yourcompany.schedule.model.ScheduleEntry;
-import java.util.List;
+import java.awt.*;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
+import java.awt.event.ActionListener; // Cần import lại
+import java.util.Objects;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import com.yourcompany.schedule.core.Scheduler;
-import com.yourcompany.schedule.core.ConflictChecker;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class MainScheduleFrame extends JFrame {
     private SchedulePanel schedulePanel;
-    private DataManager dataManager;
-    private List<Course> courses;
-    private List<Room> rooms;
-    private List<ScheduleEntry> scheduleEntries;
-    private Scheduler scheduler;
-    private ConflictChecker conflictChecker;
-    private TimetablePanel timetablePanel;
+    private TimetablePanel timetableGridPanel;
+    private ScheduleService scheduleService;
+
     private JLabel weekLabel;
-    private DateTimeFormatter weekFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    
+    private final DateTimeFormatter weekDisplayFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private JButton addEntryButton;
+    private JButton editEntryButton;
+    private JButton deleteEntryButton;
+
+    private JButton manageAcaYearsButton;
+    private JButton manageCoursesButton;
+    private JButton manageRoomsButton;
+    private JButton manageClassesButton;
+    private JButton manageTeachersButton;
+    private JButton manageOfferingsButton;
+
+    public enum TimetableFilterType {
+        TEACHER("Theo Giáo Viên"),
+        ROOM("Theo Phòng Học"),
+        CLASS("Theo Lớp Học");
+
+        private final String displayName;
+        TimetableFilterType(String displayName) { this.displayName = displayName; }
+        @Override public String toString() { return displayName; }
+    }
+
+    private JComboBox<TimetableFilterType> mainFilterTypeComboBox;
+    private JComboBox<Object> mainEntityFilterComboBox;
+    private JButton clearMainFilterButton;
+
+    private TimetableFilterType currentMainFilterType = TimetableFilterType.TEACHER;
+    private Object selectedMainFilterEntity = null;
+
+    private List<Teacher> allTeachers;
+    private List<Room> allRooms;
+    private List<SchoolClass> allSchoolClasses;
+
+
+    private ActionListener mainEntityFilterComboBoxListener;
+
     public MainScheduleFrame() {
-        setTitle("Schedule Manager");
-        setSize(800, 600);
+        this.scheduleService = new ScheduleService();
+        setTitle("Quản Lý Lịch Trình");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setLayout(new BorderLayout());
-        timetablePanel = new TimetablePanel();
+
+        setExtendedState(JFrame.MAXIMIZED_BOTH);
+
+        setMinimumSize(new Dimension(900, 650));
+
+        setLayout(new BorderLayout(5,5));
+        ((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(5,5,5,5));
+
+        initComponents();
+        loadAndRefreshAllData();
+    }
+
+    private void initComponents() {
+    	timetableGridPanel = new TimetablePanel();
         schedulePanel = new SchedulePanel();
-        
-        // Create week navigation panel
-        JPanel weekNavPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        JButton prevWeekButton = new JButton("◀ Previous Week");
-        JButton currentWeekButton = new JButton("Current Week");
-        JButton nextWeekButton = new JButton("Next Week ▶");
-        weekLabel = new JLabel();
-        updateWeekLabel();
-        
-        weekLabel.setFont(weekLabel.getFont().deriveFont(Font.BOLD));
-        weekNavPanel.add(prevWeekButton);
-        weekNavPanel.add(currentWeekButton);
-        weekNavPanel.add(weekLabel);
-        weekNavPanel.add(nextWeekButton);
-        
-        prevWeekButton.addActionListener(e -> {
-            timetablePanel.previousWeek();
-            updateWeekLabel();
-            refreshTable();
-        });
-        
-        currentWeekButton.addActionListener(e -> {
-            timetablePanel.setCurrentWeek(java.time.LocalDate.now());
-            updateWeekLabel();
-            refreshTable();
-        });
-        
-        nextWeekButton.addActionListener(e -> {
-            timetablePanel.nextWeek();
-            updateWeekLabel();
-            refreshTable();
-        });
-        
+
+        JPanel topControlPanelForTimetableTab = new JPanel(new GridBagLayout());
+        GridBagConstraints gbcTopControls = new GridBagConstraints();
+        gbcTopControls.insets = new Insets(5, 5, 5, 5);
+
+        JPanel gridFilterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+
+        gridFilterPanel.add(new JLabel("Lọc theo:"));
+        mainFilterTypeComboBox = new JComboBox<>(TimetableFilterType.values());
+        mainFilterTypeComboBox.addActionListener(e -> onMainFilterTypeChanged());
+        gridFilterPanel.add(mainFilterTypeComboBox);
+
+        gridFilterPanel.add(new JLabel("Đối tượng:"));
+        mainEntityFilterComboBox = new JComboBox<>();
+        mainEntityFilterComboBox.setPreferredSize(new Dimension(180, mainEntityFilterComboBox.getPreferredSize().height));
+
+        mainEntityFilterComboBoxListener = e -> onMainEntityFilterChanged();
+        mainEntityFilterComboBox.addActionListener(mainEntityFilterComboBoxListener);
+        gridFilterPanel.add(mainEntityFilterComboBox);
+
+        clearMainFilterButton = new JButton("Xóa Lựa Chọn");
+        clearMainFilterButton.setToolTipText("Đặt lại bộ lọc về mặc định (Theo Giáo Viên, giáo viên đầu tiên)");
+        clearMainFilterButton.addActionListener(e -> clearMainFilterAction());
+        gridFilterPanel.add(clearMainFilterButton);
+
+        gbcTopControls.gridx = 0; gbcTopControls.gridy = 0; gbcTopControls.weightx = 0;
+        gbcTopControls.anchor = GridBagConstraints.WEST; gbcTopControls.fill = GridBagConstraints.NONE;
+        topControlPanelForTimetableTab.add(gridFilterPanel, gbcTopControls);
+
+        JPanel weekNavPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+        JButton prevWeekButton = new JButton("Tuần Trước");
+        JButton currentWeekButton = new JButton("Tuần Hiện Tại");
+        JButton nextWeekButton = new JButton("Tuần Tiếp Theo");
+        weekLabel = new JLabel(); weekLabel.setFont(weekLabel.getFont().deriveFont(Font.BOLD));
+        weekNavPanel.add(prevWeekButton); weekNavPanel.add(currentWeekButton);
+        weekNavPanel.add(weekLabel); weekNavPanel.add(nextWeekButton);
+        gbcTopControls.gridx = 1; gbcTopControls.gridy = 0; gbcTopControls.weightx = 1.0;
+        gbcTopControls.anchor = GridBagConstraints.CENTER; gbcTopControls.fill = GridBagConstraints.HORIZONTAL;
+        topControlPanelForTimetableTab.add(weekNavPanel, gbcTopControls);
+
+        updateWeekDisplayLabel();
+        prevWeekButton.addActionListener(e -> navigateWeek(-1));
+        currentWeekButton.addActionListener(e -> navigateToDate(LocalDate.now()));
+        nextWeekButton.addActionListener(e -> navigateWeek(1));
+
         JTabbedPane tabbedPane = new JTabbedPane();
-        
-        // Create a scroll pane for the timetable panel
-        JScrollPane timetableScrollPane = new JScrollPane(timetablePanel);
-        timetableScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-        timetableScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        timetableScrollPane.getVerticalScrollBar().setUnitIncrement(16); // Make scrolling smoother
-        
-        // Add week navigation to the top of timetable tab
-        JPanel timetablePanel = new JPanel(new BorderLayout());
-        timetablePanel.add(weekNavPanel, BorderLayout.NORTH);
-        timetablePanel.add(timetableScrollPane, BorderLayout.CENTER);
-        
-        tabbedPane.addTab("Timetable", timetablePanel);
-        tabbedPane.addTab("Schedule Table", schedulePanel);
+        JPanel timetableTabPanel = new JPanel(new BorderLayout());
+        timetableTabPanel.add(topControlPanelForTimetableTab, BorderLayout.NORTH);
+        JScrollPane timetableScrollPane = new JScrollPane(timetableGridPanel);
+        timetableScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        timetableScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        timetableTabPanel.add(timetableScrollPane, BorderLayout.CENTER);
+        tabbedPane.addTab("Lịch Lưới (Tuần)", timetableTabPanel);
+        tabbedPane.addTab("Lịch Bảng (Chi Tiết)", schedulePanel);
         add(tabbedPane, BorderLayout.CENTER);
-        // Add button panel
-        JPanel buttonPanel = new JPanel();
-        JButton addButton = new JButton("Add");
-        JButton editButton = new JButton("Edit");
-        JButton deleteButton = new JButton("Delete");
-        JButton manageCoursesButton = new JButton("Manage Courses");
-        JButton manageRoomsButton = new JButton("Manage Rooms");
-        JButton manageTeachersButton = new JButton("Manage Teachers");
-        JButton manageClassesButton = new JButton("Manage Classes");
-        buttonPanel.add(addButton);
-        buttonPanel.add(editButton);
-        buttonPanel.add(deleteButton);
-        buttonPanel.add(manageCoursesButton);
-        buttonPanel.add(manageRoomsButton);
-        buttonPanel.add(manageTeachersButton);
-        buttonPanel.add(manageClassesButton);
-        add(buttonPanel, BorderLayout.SOUTH);
-        JMenuBar menuBar = new JMenuBar();
-        JMenu fileMenu = new JMenu("File");
-        JMenuItem exitItem = new JMenuItem("Exit");
-        exitItem.addActionListener(e -> System.exit(0));
-        fileMenu.add(exitItem);
-        menuBar.add(fileMenu);
-        setJMenuBar(menuBar);
-        // Load data from database
-        loadData();
-        // Button actions (to be implemented)
-        scheduler = new Scheduler();
-        conflictChecker = new ConflictChecker();
-        addButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                AddEditEntryDialog dialog = new AddEditEntryDialog(MainScheduleFrame.this, courses, rooms, null);
-                dialog.setVisible(true);
-                if (dialog.isConfirmed()) {
-                    ScheduleEntry newEntry = dialog.getEntry();
-                    if (newEntry == null) return;
-                    // Check for conflicts
-                    if (!scheduler.canAddEntry(newEntry, scheduleEntries)) {
-                        new ConflictDialog(MainScheduleFrame.this, "Schedule conflict detected!").setVisible(true);
-                        return;
-                    }
-                    try {
-                        dataManager.addScheduleEntry(newEntry);
-                        refreshTable();
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(MainScheduleFrame.this, "Error adding entry: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    }
-                }
-            }
-        });
-        editButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                int selectedRow = schedulePanel.getSelectedRow();
-                if (selectedRow < 0 || selectedRow >= scheduleEntries.size()) {
-                    JOptionPane.showMessageDialog(MainScheduleFrame.this, "Please select an entry to edit.", "Warning", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                ScheduleEntry selectedEntry = scheduleEntries.get(selectedRow);
-                AddEditEntryDialog dialog = new AddEditEntryDialog(MainScheduleFrame.this, courses, rooms, selectedEntry);
-                dialog.setVisible(true);
-                if (dialog.isConfirmed()) {
-                    ScheduleEntry updatedEntry = dialog.getEntry();
-                    if (updatedEntry == null) return;
-                    updatedEntry.setEntryId(selectedEntry.getEntryId());
-                    // Remove the current entry from the list for conflict check
-                    List<ScheduleEntry> tempList = new java.util.ArrayList<>(scheduleEntries);
-                    tempList.remove(selectedEntry);
-                    if (!scheduler.canAddEntry(updatedEntry, tempList)) {
-                        new ConflictDialog(MainScheduleFrame.this, "Schedule conflict detected!").setVisible(true);
-                        return;
-                    }
-                    try {
-                        dataManager.updateScheduleEntry(updatedEntry);
-                        refreshTable();
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(MainScheduleFrame.this, "Error updating entry: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    }
-                }
-            }
-        });
-        deleteButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                int selectedRow = schedulePanel.getSelectedRow();
-                if (selectedRow < 0 || selectedRow >= scheduleEntries.size()) {
-                    JOptionPane.showMessageDialog(MainScheduleFrame.this, "Please select an entry to delete.", "Warning", JOptionPane.WARNING_MESSAGE);
-                    return;
-                }
-                int confirm = JOptionPane.showConfirmDialog(MainScheduleFrame.this, "Are you sure you want to delete this entry?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
-                if (confirm == JOptionPane.YES_OPTION) {
-                    try {
-                        dataManager.deleteScheduleEntry(scheduleEntries.get(selectedRow).getEntryId());
-                        refreshTable();
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(MainScheduleFrame.this, "Error deleting entry: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    }
-                }
-            }
-        });
-        manageCoursesButton.addActionListener(e -> {
-            ManageCoursesDialog dialog = new ManageCoursesDialog(MainScheduleFrame.this, dataManager);
-            dialog.setVisible(true);
-            refreshTable();
-        });
-        manageRoomsButton.addActionListener(e -> {
-            ManageRoomsDialog dialog = new ManageRoomsDialog(MainScheduleFrame.this, dataManager);
-            dialog.setVisible(true);
-            refreshTable();
-        });
-        manageTeachersButton.addActionListener(e -> {
-            ManageTeachersDialog dialog = new ManageTeachersDialog(MainScheduleFrame.this, dataManager);
-            dialog.setVisible(true);
-            refreshTable();
-        });
-        manageClassesButton.addActionListener(e -> {
-            ManageClassesDialog dialog = new ManageClassesDialog(MainScheduleFrame.this, dataManager);
-            dialog.setVisible(true);
-            refreshTable();
-        });
+
+        JPanel actionButtonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+        addEntryButton = new JButton("Thêm Lịch Học"); editEntryButton = new JButton("Sửa Lịch Học");
+        deleteEntryButton = new JButton("Xóa Lịch Học");
+        actionButtonPanel.add(addEntryButton); actionButtonPanel.add(editEntryButton); actionButtonPanel.add(deleteEntryButton);
+
+        JPanel managementButtonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
+        managementButtonPanel.setBorder(BorderFactory.createTitledBorder("Quản Lý Dữ Liệu"));
+        manageAcaYearsButton = new JButton("Năm Học"); manageCoursesButton = new JButton("Môn Học");
+        manageRoomsButton = new JButton("Phòng Học"); manageClassesButton = new JButton("Lớp Học");
+        manageTeachersButton = new JButton("Giáo Viên"); manageOfferingsButton = new JButton("Phân Công GD");
+        managementButtonPanel.add(manageAcaYearsButton); managementButtonPanel.add(manageCoursesButton);
+        managementButtonPanel.add(manageRoomsButton); managementButtonPanel.add(manageClassesButton);
+        managementButtonPanel.add(manageTeachersButton); managementButtonPanel.add(manageOfferingsButton);
+
+        JPanel southPanel = new JPanel(new BorderLayout());
+        southPanel.add(actionButtonPanel, BorderLayout.CENTER); southPanel.add(managementButtonPanel, BorderLayout.SOUTH);
+        add(southPanel, BorderLayout.SOUTH);
+
+        JMenuBar menuBar = new JMenuBar(); JMenu fileMenu = new JMenu("Tệp");
+        JMenuItem refreshDataItem = new JMenuItem("Làm Mới Dữ Liệu");
+        refreshDataItem.addActionListener(e -> loadAndRefreshAllData());
+        fileMenu.add(refreshDataItem); fileMenu.addSeparator();
+        JMenuItem exitItem = new JMenuItem("Thoát"); exitItem.addActionListener(e -> System.exit(0));
+        fileMenu.add(exitItem); menuBar.add(fileMenu); setJMenuBar(menuBar);
+
+        addEntryButton.addActionListener(this::addScheduleEntryAction);
+        editEntryButton.addActionListener(this::editScheduleEntryAction);
+        deleteEntryButton.addActionListener(this::deleteScheduleEntryAction);
+        manageAcaYearsButton.addActionListener(e -> { new ManageAcaYearsDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+        manageCoursesButton.addActionListener(e -> { new ManageCoursesDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+        manageRoomsButton.addActionListener(e -> { new ManageRoomsDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+        manageTeachersButton.addActionListener(e -> { new ManageTeachersDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+        manageClassesButton.addActionListener(e -> { new ManageClassesDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+        manageOfferingsButton.addActionListener(e -> { new ManageCourseOfferingsDialog(this, scheduleService).setVisible(true); loadAndRefreshAllData(); });
+
     }
 
-    private void loadData() {
-        try {
-            dataManager = new DataManager();
-            
-            // Initialize the database schema and seed data if needed
-            try {
-                dataManager.initializeDatabase();
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this, "Error initializing database: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                System.exit(1);
+    private void onMainFilterTypeChanged() {
+        currentMainFilterType = (TimetableFilterType) mainFilterTypeComboBox.getSelectedItem();
+
+        updateMainEntityFilterComboBox();
+
+        refreshTimetableWithMainFilter();
+    }
+
+    private void onMainEntityFilterChanged() {
+
+        Object currentComboSelection = mainEntityFilterComboBox.getSelectedItem();
+        int selectedIndex = mainEntityFilterComboBox.getSelectedIndex();
+
+        if (mainEntityFilterComboBox.isEnabled()) {
+            Object newSelectedEntity = null;
+            if (selectedIndex > 0) {
+                newSelectedEntity = currentComboSelection;
             }
-            courses = dataManager.getAllCourses();
-            rooms = dataManager.getAllRooms();
-            scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
-            timetablePanel.setEntries(scheduleEntries);
-            schedulePanel.clearTable();
-            for (ScheduleEntry entry : scheduleEntries) {
-                schedulePanel.addScheduleRow(entry);
+
+            if (!Objects.equals(selectedMainFilterEntity, newSelectedEntity)) {
+                selectedMainFilterEntity = newSelectedEntity;
+                refreshTimetableWithMainFilter();
             }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error loading data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 
-    private void refreshTable() {
-        try {
-            courses = dataManager.getAllCourses();
-            rooms = dataManager.getAllRooms();
-            scheduleEntries = dataManager.getAllScheduleEntries(courses, rooms);
-            
-            // Filter entries for the timetable based on the selected week
-            List<ScheduleEntry> weekEntries = filterEntriesForSelectedWeek(scheduleEntries);
-            timetablePanel.setEntries(weekEntries);
-            
-            // Update the schedule table with all entries
-            schedulePanel.clearTable();
-            for (ScheduleEntry entry : scheduleEntries) {
-                schedulePanel.addScheduleRow(entry);
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Error loading data: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+    private void clearMainFilterAction() {
+        if (mainFilterTypeComboBox.getItemCount() > 0) {
+            mainFilterTypeComboBox.setSelectedItem(TimetableFilterType.TEACHER);
         }
     }
-    
-    /**
-     * Filters schedule entries to only include those in the currently selected week
-     */
-    private List<ScheduleEntry> filterEntriesForSelectedWeek(List<ScheduleEntry> allEntries) {
-        if (allEntries == null) return new java.util.ArrayList<>();
-        
-        java.time.LocalDate weekStart = timetablePanel.getCurrentWeekStart();
-        java.time.LocalDate weekEnd = weekStart.plusDays(6);
-        
-        return allEntries.stream()
-            .filter(entry -> {
-                if (entry.getStartDateTime() == null) return false;
-                
-                java.time.LocalDate entryDate = entry.getStartDateTime().toLocalDate();
-                return !entryDate.isBefore(weekStart) && !entryDate.isAfter(weekEnd);
-            })
-            .collect(java.util.stream.Collectors.toList());
+
+    private void updateMainEntityFilterComboBox() {
+        if (mainEntityFilterComboBoxListener != null) {
+            mainEntityFilterComboBox.removeActionListener(mainEntityFilterComboBoxListener);
+        }
+
+        mainEntityFilterComboBox.removeAllItems();
+        mainEntityFilterComboBox.setEnabled(true);
+
+        if (currentMainFilterType == null && TimetableFilterType.values().length > 0) {
+            currentMainFilterType = TimetableFilterType.values()[0]; // Fallback
+        }
+
+        String placeholder = "";
+        List<?> entities = null;
+
+        switch (currentMainFilterType) {
+            case TEACHER:
+                placeholder = "Chọn Giáo Viên...";
+                entities = allTeachers;
+                break;
+            case ROOM:
+                placeholder = "Chọn Phòng Học...";
+                entities = allRooms;
+                break;
+            case CLASS:
+                placeholder = "Chọn Lớp Học...";
+                entities = allSchoolClasses;
+                break;
+            default:
+                mainEntityFilterComboBox.addItem("Lỗi: Loại lọc không xác định");
+                mainEntityFilterComboBox.setEnabled(false);
+                selectedMainFilterEntity = null;
+                if (mainEntityFilterComboBoxListener != null) {
+                    mainEntityFilterComboBox.addActionListener(mainEntityFilterComboBoxListener);
+                }
+                return;
+        }
+
+        mainEntityFilterComboBox.addItem(placeholder);
+        if (entities != null) {
+            for (Object entity : entities) {
+                mainEntityFilterComboBox.addItem(entity);
+            }
+        }
+
+        if (mainEntityFilterComboBox.getItemCount() > 1) {
+            mainEntityFilterComboBox.setSelectedIndex(1);
+            selectedMainFilterEntity = mainEntityFilterComboBox.getSelectedItem();
+        } else {
+            mainEntityFilterComboBox.setSelectedIndex(0);
+            selectedMainFilterEntity = null;
+        }
+
+        if (mainEntityFilterComboBoxListener != null) {
+            mainEntityFilterComboBox.addActionListener(mainEntityFilterComboBoxListener);
+        }
     }
 
-    private void updateWeekLabel() {
-        String startDate = timetablePanel.getCurrentWeekStart().format(weekFormatter);
-        String endDate = timetablePanel.getCurrentWeekStart().plusDays(6).format(weekFormatter);
-        int weekNumber = timetablePanel.getCurrentWeekNumber();
-        int year = timetablePanel.getCurrentYear();
-        weekLabel.setText(String.format("Week %d, %d: %s - %s", weekNumber, year, startDate, endDate));
-        
-        // Sync the week selection with the schedule panel
-        schedulePanel.setCurrentWeek(timetablePanel.getCurrentWeekStart());
+    private void refreshTimetableWithMainFilter() {
+        System.out.println("Refreshing TIMETABLE GRID. Filter: " + currentMainFilterType + ", Entity: " + selectedMainFilterEntity);
+        List<ScheduleEntry> allEntriesFromService = scheduleService.getAllScheduleEntries();
+        List<ScheduleEntry> filteredEntriesForTimetable;
+
+        if (selectedMainFilterEntity == null) {
+            filteredEntriesForTimetable = new ArrayList<>(allEntriesFromService);
+            System.out.println("Timetable grid: No specific entity selected. Showing all entries for the week.");
+        } else {
+            filteredEntriesForTimetable = allEntriesFromService.stream()
+                .filter(entry -> {
+                    switch (currentMainFilterType) {
+                        case TEACHER:
+                            return entry.getCourseOffering() != null &&
+                                   entry.getCourseOffering().getTeacher() != null &&
+                                   Objects.equals(entry.getCourseOffering().getTeacher(), selectedMainFilterEntity);
+                        case ROOM:
+                            return entry.getRoom() != null && Objects.equals(entry.getRoom(), selectedMainFilterEntity);
+                        case CLASS:
+                            return entry.getSchoolClass() != null && Objects.equals(entry.getSchoolClass(), selectedMainFilterEntity);
+                        default:
+                            return true;
+                    }
+                })
+                .collect(Collectors.toList());
+             System.out.println("Timetable grid: Filtered by " + currentMainFilterType + " - " + selectedMainFilterEntity);
+        }
+
+        timetableGridPanel.setEntries(filteredEntriesForTimetable);
+        System.out.println("Timetable grid refreshed. Filtered entry count for grid: " + filteredEntriesForTimetable.size());
     }
 
-    // Add method to handle week changes from schedule panel
-    public void setCurrentWeek(java.time.LocalDate date) {
-        timetablePanel.setCurrentWeek(date);
-        updateWeekLabel();
-        refreshTable();
+    private void loadFilterEntityData() {
+		allTeachers = scheduleService.getAllTeachers();
+		allRooms = scheduleService.getAllRooms();
+		allSchoolClasses = scheduleService.getAllSchoolClasses();
+        System.out.println("Filter entity data loaded. Teachers: " + (allTeachers != null ? allTeachers.size() : 0) +
+                           ", Rooms: " + (allRooms != null ? allRooms.size() : 0) +
+                           ", Classes: " + (allSchoolClasses != null ? allSchoolClasses.size() : 0));
+	}
+
+    private void navigateWeek(int weekOffset) {
+        LocalDate newWeekStart = timetableGridPanel.getCurrentWeekStart().plusWeeks(weekOffset);
+        navigateToDate(newWeekStart);
     }
-} 
+
+    private void navigateToDate(LocalDate date) {
+        timetableGridPanel.setCurrentWeek(date);
+        schedulePanel.setCurrentWeek(date);
+        updateWeekDisplayLabel();
+        refreshScheduleViews();
+    }
+
+    private void updateWeekDisplayLabel() {
+        if (weekLabel == null || timetableGridPanel == null) return;
+        LocalDate current = timetableGridPanel.getCurrentWeekStart();
+        String startDate = current.format(weekDisplayFormatter);
+        String endDate = current.plusDays(6).format(weekDisplayFormatter);
+        int weekNumber = current.get(java.time.temporal.WeekFields.of(java.util.Locale.getDefault()).weekOfWeekBasedYear());
+        weekLabel.setText(String.format("Tuần %d: %s - %s (%d)", weekNumber, startDate, endDate, current.getYear()));
+    }
+
+    private void loadAndRefreshAllData() {
+        System.out.println("Loading all data from service...");
+        loadFilterEntityData();
+
+        mainFilterTypeComboBox.setSelectedItem(currentMainFilterType);
+
+        updateMainEntityFilterComboBox();
+
+        List<ScheduleEntry> allEntriesFromService = scheduleService.getAllScheduleEntries();
+        schedulePanel.setScheduleEntries(allEntriesFromService);
+        System.out.println("SchedulePanel (table) updated with " + allEntriesFromService.size() + " total entries.");
+
+        refreshTimetableWithMainFilter();
+
+        updateWeekDisplayLabel();
+        System.out.println("All data refresh complete.");
+    }
+
+    private void refreshScheduleViews() {
+        System.out.println("Refreshing schedule views...");
+        List<ScheduleEntry> allEntriesFromService = scheduleService.getAllScheduleEntries();
+
+        schedulePanel.setScheduleEntries(allEntriesFromService); // Lịch bảng luôn nhận toàn bộ
+        System.out.println("SchedulePanel (table) refreshed with " + allEntriesFromService.size() + " total entries.");
+
+        refreshTimetableWithMainFilter();
+
+        updateWeekDisplayLabel();
+        System.out.println("Schedule views refreshed.");
+    }
+
+    private void addScheduleEntryAction(ActionEvent e) {
+        List<CourseOffering> offerings = scheduleService.getAllCourseOfferings();
+        List<SchoolClass> classes = scheduleService.getAllSchoolClasses();
+        List<Room> rooms = scheduleService.getAllRooms();
+        List<AcaYear> acaYears = scheduleService.getAllAcaYears();
+
+        if (offerings.isEmpty() || classes.isEmpty() || rooms.isEmpty() || acaYears.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "Không đủ dữ liệu nền (Phân công, Lớp, Phòng, Năm học) để thêm lịch học.\n" +
+                "Vui lòng thêm dữ liệu này trước.", "Thiếu Dữ Liệu", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        AddEditEntryDialog dialog = new AddEditEntryDialog(this, null, offerings, classes, rooms, acaYears);
+        dialog.setVisible(true);
+
+        if (dialog.isConfirmed()) {
+            ScheduleEntry newEntry = dialog.getEntryData();
+            if (newEntry != null) {
+                Optional<ScheduleEntry> addedEntryOpt = scheduleService.createAndAddScheduleEntry(
+                        newEntry.getCourseOffering(), newEntry.getSchoolClass(), newEntry.getRoom(),
+                        newEntry.getAcaYear(), newEntry.getDate(), newEntry.getStartPeriod(), newEntry.getEndPeriod()
+                );
+                if (addedEntryOpt.isPresent()) {
+                    JOptionPane.showMessageDialog(this, "Thêm lịch học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                    loadAndRefreshAllData();
+                } else {
+                    JOptionPane.showMessageDialog(this, "Không thể thêm lịch học. Đã có lỗi hoặc xung đột.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+    }
+
+    private void editScheduleEntryAction(ActionEvent e) {
+        ScheduleEntry selectedEntry = schedulePanel.getSelectedEntry();
+        if (selectedEntry == null) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một mục lịch học từ bảng để sửa.", "Thông Báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        List<CourseOffering> offerings = scheduleService.getAllCourseOfferings();
+        List<SchoolClass> classes = scheduleService.getAllSchoolClasses();
+        List<Room> rooms = scheduleService.getAllRooms();
+        List<AcaYear> acaYears = scheduleService.getAllAcaYears();
+
+        AddEditEntryDialog dialog = new AddEditEntryDialog(this, selectedEntry, offerings, classes, rooms, acaYears);
+        dialog.setVisible(true);
+
+        if (dialog.isConfirmed()) {
+            ScheduleEntry updatedEntryData = dialog.getEntryData();
+            if (updatedEntryData != null) {
+                boolean success = scheduleService.updateScheduleEntry(
+                        selectedEntry.getEntryId(),
+                        updatedEntryData.getCourseOffering(), updatedEntryData.getSchoolClass(), updatedEntryData.getRoom(),
+                        updatedEntryData.getAcaYear(), updatedEntryData.getDate(),
+                        updatedEntryData.getStartPeriod(), updatedEntryData.getEndPeriod()
+                );
+                if (success) {
+                    JOptionPane.showMessageDialog(this, "Cập nhật lịch học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                    loadAndRefreshAllData();
+                } else {
+                    JOptionPane.showMessageDialog(this, "Không thể cập nhật lịch học. Đã có lỗi hoặc xung đột.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+    }
+
+    private void deleteScheduleEntryAction(ActionEvent e) {
+        ScheduleEntry selectedEntry = schedulePanel.getSelectedEntry();
+        if (selectedEntry == null) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một mục lịch học từ bảng để xóa.", "Thông Báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Bạn có chắc chắn muốn xóa mục lịch học này không?\n" + selectedEntry.toString(),
+                "Xác Nhận Xóa", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (confirm == JOptionPane.YES_OPTION) {
+            boolean success = scheduleService.deleteScheduleEntry(selectedEntry.getEntryId());
+            if (success) {
+                JOptionPane.showMessageDialog(this, "Xóa lịch học thành công!", "Thông Báo", JOptionPane.INFORMATION_MESSAGE);
+                loadAndRefreshAllData();
+            } else {
+                JOptionPane.showMessageDialog(this, "Lỗi khi xóa lịch học.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        SwingUtilities.invokeLater(() -> {
+            new MainScheduleFrame().setVisible(true);
+        });
+    }
+}

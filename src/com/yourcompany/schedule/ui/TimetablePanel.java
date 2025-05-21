@@ -1,15 +1,13 @@
 package com.yourcompany.schedule.ui;
 
-import com.yourcompany.schedule.model.ScheduleEntry;
-import com.yourcompany.schedule.model.Course;
-import com.yourcompany.schedule.model.Room;
+import com.yourcompany.schedule.model.*; // Import tất cả model
 
 import javax.swing.*;
 import java.awt.*;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
+// import java.time.LocalTime; // Không còn dùng trực tiếp ở đây
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.WeekFields;
@@ -17,59 +15,69 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects; // Thêm import này
 
 public class TimetablePanel extends JPanel {
-    private static final int START_HOUR = 0; // Start from midnight
-    private static final int END_HOUR = 24; // End at midnight
-    private static final int SLOT_HEIGHT = 40;
-    private static final int SLOT_WIDTH = 120;
+    private static final int START_HOUR = 7; // Giờ bắt đầu hiển thị trên lưới
+    private static final int END_HOUR = 18;   // Giờ kết thúc hiển thị trên lưới (đến 18:59)
+    private static final int SLOT_HEIGHT = 50; // Chiều cao của mỗi "giờ" trên lưới
+    // private static final int SLOT_WIDTH = 120; // Sẽ được tính toán động
     private static final DayOfWeek[] DAYS = {
         DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
         DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY
     };
-    private static final int GRID_MARGIN = 20;
+    private static final int HEADER_HEIGHT = 30; // Chiều cao cho tiêu đề ngày
+    private static final int TIME_LABEL_WIDTH = 40; // Chiều rộng cho nhãn thời gian
+    private static final int GRID_MARGIN = 20; // Lề chung
+
     private List<ScheduleEntry> entries;
     private Map<Course, Color> courseColors = new HashMap<>();
-    private Color[] palette = {new Color(135,206,250), new Color(255,182,193), new Color(144,238,144), new Color(255,255,153), new Color(255,160,122), new Color(221,160,221)};
-    
-    // Week selection properties
+    private final Color[] palette = {
+        new Color(135, 206, 250), new Color(255, 182, 193), new Color(144, 238, 144),
+        new Color(255, 255, 153), new Color(255, 160, 122), new Color(221, 160, 221),
+        new Color(173, 216, 230), new Color(240, 128, 128), new Color(255, 218, 185)
+    };
+
     private LocalDate currentWeekStart;
-    private DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("dd/MM");
+    private final DateTimeFormatter dayFormatter = DateTimeFormatter.ofPattern("dd/MM");
 
     public TimetablePanel() {
-        // Initialize with current week
         setCurrentWeek(LocalDate.now());
-        
-        // Set a larger preferred size to accommodate all hours
-        setPreferredSize(new Dimension(SLOT_WIDTH * DAYS.length + 60, SLOT_HEIGHT * (END_HOUR - START_HOUR) + 40));
-        setToolTipText("");
+        // Kích thước sẽ được tính toán lại trong paintComponent,
+        // nhưng có thể đặt một kích thước ban đầu hợp lý.
+        setPreferredSize(new Dimension(TIME_LABEL_WIDTH + (120 * DAYS.length) + GRID_MARGIN * 2,
+                                       HEADER_HEIGHT + (SLOT_HEIGHT * (END_HOUR - START_HOUR)) + GRID_MARGIN * 2));
+        setToolTipText(""); // Kích hoạt tooltips
     }
-    
-    public void setCurrentWeek(LocalDate date) {
-        // Find the Monday of the week containing the given date
-        this.currentWeekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+    public void setCurrentWeek(LocalDate dateInWeek) {
+        this.currentWeekStart = dateInWeek.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        assignColors(); // Gán lại màu khi tuần thay đổi và entries có thể khác
         repaint();
     }
-    
+
     public LocalDate getCurrentWeekStart() {
         return currentWeekStart;
     }
-    
+
     public void nextWeek() {
         setCurrentWeek(currentWeekStart.plusWeeks(1));
     }
-    
+
     public void previousWeek() {
         setCurrentWeek(currentWeekStart.minusWeeks(1));
     }
-    
-    public int getCurrentWeekNumber() {
-        return currentWeekStart.get(WeekFields.of(Locale.getDefault()).weekOfWeekBasedYear());
+
+    public String getCurrentWeekDisplay() {
+        LocalDate weekEnd = currentWeekStart.plusDays(6);
+        return String.format("Tuần %d (%s - %s %d)",
+                currentWeekStart.get(WeekFields.of(Locale.getDefault()).weekOfWeekBasedYear()),
+                currentWeekStart.format(dayFormatter),
+                weekEnd.format(dayFormatter),
+                currentWeekStart.getYear()
+        );
     }
-    
-    public int getCurrentYear() {
-        return currentWeekStart.getYear();
-    }
+
 
     public void setEntries(List<ScheduleEntry> entries) {
         this.entries = entries;
@@ -82,9 +90,9 @@ public class TimetablePanel extends JPanel {
         if (entries == null) return;
         int idx = 0;
         for (ScheduleEntry entry : entries) {
-            Course c = entry.getCourse();
-            if (c != null && !courseColors.containsKey(c)) {
-                courseColors.put(c, palette[idx % palette.length]);
+            Course course = entry.getCourse(); // Sử dụng getter tiện ích trong ScheduleEntry
+            if (course != null && !courseColors.containsKey(course)) {
+                courseColors.put(course, palette[idx % palette.length]);
                 idx++;
             }
         }
@@ -95,184 +103,245 @@ public class TimetablePanel extends JPanel {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        int width = getWidth();
-        int height = getHeight();
-        int gridWidth = width - 2 * GRID_MARGIN - 40;
-        int gridHeight = SLOT_HEIGHT * (END_HOUR - START_HOUR); // Fixed grid height based on hours
-        int slotWidth = gridWidth / DAYS.length;
-        int slotHeight = SLOT_HEIGHT; // Fixed slot height
-        int minBlockHeight = 18;
-        
-        // Draw background
-        g2.setColor(new Color(245, 245, 250));
-        g2.fillRect(GRID_MARGIN, GRID_MARGIN, gridWidth + 40, gridHeight);
-        
-        // Draw grid
-        g2.setColor(new Color(200, 200, 200));
+
+        int panelWidth = getWidth();
+        // int panelHeight = getHeight(); // Không dùng trực tiếp panelHeight cho lưới
+
+        int gridContentWidth = panelWidth - TIME_LABEL_WIDTH - GRID_MARGIN * 2;
+        int slotWidth = gridContentWidth / DAYS.length; // Tính toán động slotWidth
+
+        // Chiều cao cố định của lưới dựa trên số giờ và chiều cao slot
+        int gridContentHeight = SLOT_HEIGHT * (END_HOUR - START_HOUR);
+
+        // Tọa độ bắt đầu của lưới (sau lề và nhãn thời gian/tiêu đề ngày)
+        int gridX = GRID_MARGIN + TIME_LABEL_WIDTH;
+        int gridY = GRID_MARGIN + HEADER_HEIGHT;
+
+        // Draw background cho toàn bộ panel
+        g2.setColor(getBackground()); // Hoặc new Color(230, 230, 230)
+        g2.fillRect(0, 0, panelWidth, getHeight());
+
+        // Draw background cho khu vực lưới
+        g2.setColor(new Color(245, 245, 250)); // Màu nền lưới
+        g2.fillRect(gridX, gridY, gridContentWidth, gridContentHeight);
+
+        // Draw grid lines
+        g2.setColor(new Color(200, 200, 200)); // Màu đường kẻ lưới
+        // Vertical lines (chia ngày)
         for (int i = 0; i <= DAYS.length; i++) {
-            int x = GRID_MARGIN + 40 + i * slotWidth;
-            g2.drawLine(x, GRID_MARGIN, x, GRID_MARGIN + gridHeight);
+            int x = gridX + i * slotWidth;
+            g2.drawLine(x, gridY, x, gridY + gridContentHeight);
         }
-        for (int i = 0; i <= END_HOUR - START_HOUR; i++) {
-            int y = GRID_MARGIN + i * slotHeight;
-            g2.drawLine(GRID_MARGIN + 40, y, GRID_MARGIN + 40 + DAYS.length * slotWidth, y);
+        // Horizontal lines (chia giờ)
+        for (int i = 0; i <= (END_HOUR - START_HOUR); i++) {
+            int y = gridY + i * SLOT_HEIGHT;
+            g2.drawLine(gridX, y, gridX + gridContentWidth, y);
         }
-        
-        // Draw day labels with dates
+
+        // Draw day labels with dates (phía trên lưới)
         g2.setColor(Color.BLACK);
         Font originalFont = g2.getFont();
-        Font boldFont = originalFont.deriveFont(Font.BOLD);
-        
+        Font dayHeaderFont = originalFont.deriveFont(Font.BOLD, originalFont.getSize() -1f); // Nhỏ hơn một chút
+        g2.setFont(dayHeaderFont);
+        FontMetrics fmHeader = g2.getFontMetrics();
+
         for (int i = 0; i < DAYS.length; i++) {
             LocalDate date = currentWeekStart.plusDays(i);
-            String dayName = DAYS[i].toString().substring(0, 1) + DAYS[i].toString().substring(1).toLowerCase();
+            String dayName = DAYS[i].toString().substring(0, 1) + DAYS[i].toString().substring(1,3).toLowerCase(); // Mon, Tue
             String dateStr = date.format(dayFormatter);
             String label = dayName + " " + dateStr;
             
-            g2.setFont(boldFont);
-            g2.drawString(label, GRID_MARGIN + 40 + i * slotWidth + 10, GRID_MARGIN - 5);
-            g2.setFont(originalFont);
+            int labelWidth = fmHeader.stringWidth(label);
+            g2.drawString(label, gridX + i * slotWidth + (slotWidth - labelWidth) / 2, GRID_MARGIN + fmHeader.getAscent());
         }
-        
-        // Draw time labels
-        for (int i = 0; i < END_HOUR - START_HOUR; i++) {
-            String time = String.format("%02d:00", START_HOUR + i);
-            g2.drawString(time, GRID_MARGIN, GRID_MARGIN + i * slotHeight + 15);
+
+        // Draw time labels (bên trái lưới)
+        g2.setFont(originalFont.deriveFont(originalFont.getSize() - 2f)); // Font nhỏ hơn cho giờ
+        FontMetrics fmTime = g2.getFontMetrics();
+        for (int i = 0; i < (END_HOUR - START_HOUR); i++) {
+            int hour = START_HOUR + i;
+            String time = String.format("%02d:00", hour);
+            int timeWidth = fmTime.stringWidth(time);
+            g2.drawString(time, GRID_MARGIN + (TIME_LABEL_WIDTH - timeWidth) / 2 -2 , gridY + i * SLOT_HEIGHT + fmTime.getAscent() + 3);
         }
-        
-        // Draw entries that fall within the current week
+        g2.setFont(originalFont); // Reset font
+
+        // Draw entries
         if (entries != null) {
             for (ScheduleEntry entry : entries) {
-                LocalDateTime entryDateTime = entry.getStartDateTime();
-                LocalDate entryDate = entryDateTime.toLocalDate();
-                
-                // Only draw entries that fall within the displayed week
-                if (isDateInCurrentWeek(entryDate)) {
-                    drawEntry(g2, entry, slotWidth, slotHeight, minBlockHeight);
+                // Chỉ vẽ các entry thuộc tuần hiện tại
+                if (entry.getDate() != null && isDateInCurrentWeek(entry.getDate())) {
+                    drawEntry(g2, entry, gridX, gridY, slotWidth, SLOT_HEIGHT);
                 }
             }
         }
     }
-    
+
     private boolean isDateInCurrentWeek(LocalDate date) {
-        // Check if the date falls within the current week (Monday to Sunday)
-        LocalDate weekEnd = currentWeekStart.plusDays(6);
+        if (date == null || currentWeekStart == null) return false;
+        LocalDate weekEnd = currentWeekStart.plusDays(6); // Chủ nhật của tuần hiện tại
         return !date.isBefore(currentWeekStart) && !date.isAfter(weekEnd);
     }
 
-    private void drawEntry(Graphics2D g2, ScheduleEntry entry, int slotWidth, int slotHeight, int minBlockHeight) {
-        LocalDateTime start = entry.getStartDateTime();
-        LocalDateTime end = entry.getEndDateTime();
-        LocalDate entryDate = start.toLocalDate();
+ // Trong TimetablePanel.java, phương thức drawEntry
+
+    private void drawEntry(Graphics2D g2, ScheduleEntry entry, int gridStartX, int gridStartY, int colWidth, int hourHeight) {
+    	Font originalFontForEntry = g2.getFont();
+    	
+        LocalDateTime startDateTime = entry.getStartDateTime();
+        LocalDateTime endDateTime = entry.getEndDateTime();
+
+        if (startDateTime == null || endDateTime == null) return;
+
+        LocalDate entryDate = entry.getDate();
+        int dayIndex = entryDate.getDayOfWeek().getValue() - 1;
+
+        double startHourFraction = startDateTime.getHour() + startDateTime.getMinute() / 60.0;
+        double endHourFraction = endDateTime.getHour() + endDateTime.getMinute() / 60.0;
+
+        if (endHourFraction <= START_HOUR || startHourFraction >= END_HOUR) return;
         
-        // Calculate days since start of week
-        int daysSinceWeekStart = (int) java.time.temporal.ChronoUnit.DAYS.between(currentWeekStart, entryDate);
-        if (daysSinceWeekStart < 0 || daysSinceWeekStart >= DAYS.length) return;
-        
-        double startFrac = (start.getHour() + start.getMinute()/60.0 - START_HOUR);
-        double endFrac = (end.getHour() + end.getMinute()/60.0 - START_HOUR);
-        int y = GRID_MARGIN + (int)(startFrac * slotHeight);
-        int height = Math.max((int)((endFrac - startFrac) * slotHeight), minBlockHeight);
-        int x = GRID_MARGIN + 40 + daysSinceWeekStart * slotWidth;
-        Color color = courseColors.getOrDefault(entry.getCourse(), Color.LIGHT_GRAY);
-        g2.setColor(color);
-        g2.fillRoundRect(x+4, y+4, slotWidth-8, height-8, 10, 10);
-        g2.setColor(Color.DARK_GRAY);
-        g2.drawRoundRect(x+4, y+4, slotWidth-8, height-8, 10, 10);
-        
-        // Draw course name, teacher, class and room information
-        g2.setColor(Color.BLACK);
+        double effectiveStartHour = Math.max(startHourFraction, START_HOUR);
+        double effectiveEndHour = Math.min(endHourFraction, END_HOUR);
+
+        if (effectiveEndHour <= effectiveStartHour) return; // Không có gì để vẽ
+
+        int x = gridStartX + dayIndex * colWidth;
+        int y = gridStartY + (int) ((effectiveStartHour - START_HOUR) * hourHeight);
+        int entryHeight = (int) ((effectiveEndHour - effectiveStartHour) * hourHeight);
+
+        // Đặt một chiều cao tối thiểu để trực quan hóa, nhưng text chỉ vẽ nếu đủ chỗ
+        int visualMinHeight = 5; 
+        if (entryHeight < visualMinHeight) entryHeight = visualMinHeight;
+
+        Course course = entry.getCourse();
+        Color baseColor = courseColors.getOrDefault(course, Color.LIGHT_GRAY);
+
+        // Vẽ nền và viền
+        g2.setColor(baseColor.darker());
+        g2.fillRoundRect(x + 2, y + 2, colWidth - 4, entryHeight - 4, 8, 8);
+        g2.setColor(baseColor);
+        g2.fillRoundRect(x + 3, y + 3, colWidth - 6, entryHeight - 6, 6, 6);
+
+        // Chỉ vẽ text nếu chiều cao đủ cho ít nhất một phần của dòng đầu tiên
+        Font entryFont = originalFontForEntry.deriveFont(10f); // Tạo font mới dựa trên font gốc của context
+        g2.setFont(entryFont); // Set font mới để vẽ text của entry
         FontMetrics fm = g2.getFontMetrics();
         int lineHeight = fm.getHeight();
-        int textX = x + 12;
-        int textY = y + 20;
-        int maxWidth = slotWidth - 16;
-        
-        // Course name
-        String courseName = entry.getCourse() != null ? entry.getCourse().getCourseName() : "";
-        String displayCourseName = getEllipsisText(courseName, maxWidth, fm);
-        g2.drawString(displayCourseName, textX, textY);
-        
-        // Only draw additional info if the block is tall enough
-        if (height >= minBlockHeight + lineHeight * 2) {
-            // Room
-            String roomName = entry.getRoom() != null ? entry.getRoom().getRoomName() : "";
-            String displayRoomName = getEllipsisText("Room: " + roomName, maxWidth, fm);
-            g2.drawString(displayRoomName, textX, textY + lineHeight);
-            
-            // Teacher - only if height permits
-            if (height >= minBlockHeight + lineHeight * 3) {
-                String teacherName = entry.getCourse() != null && entry.getCourse().getTeacher() != null ? 
-                                    entry.getCourse().getTeacher().getName() : "";
-                String displayTeacherName = getEllipsisText("Teacher: " + teacherName, maxWidth, fm);
-                g2.drawString(displayTeacherName, textX, textY + lineHeight * 2);
-                
-                // Class - only if height permits
-                if (height >= minBlockHeight + lineHeight * 4) {
-                    String className = entry.getCourse() != null && entry.getCourse().getSchoolClass() != null ? 
-                                      entry.getCourse().getSchoolClass().getName() : "";
-                    String displayClassName = getEllipsisText("Class: " + className, maxWidth, fm);
-                    g2.drawString(displayClassName, textX, textY + lineHeight * 3);
+        int textPaddingX = 5;
+        int textPaddingY = 4; // Padding từ đỉnh của ô entry
+        int textX = x + textPaddingX;
+        int currentTextY = y + fm.getAscent() + textPaddingY;
+        int maxWidth = colWidth - (2 * textPaddingX);
+
+        // Kiểm tra xem có đủ chỗ cho ít nhất dòng đầu tiên không
+        if (entryHeight >= lineHeight * 0.8 + (2 * textPaddingY)) { // Cần đủ không gian cho text và padding
+        	g2.setColor(Color.BLACK); 
+
+            String courseCode = (course != null) ? course.getCourseCode() : "N/A";
+            g2.drawString(getEllipsisText(courseCode, maxWidth, fm), textX, currentTextY);
+            currentTextY += lineHeight;
+
+            // Kiểm tra đủ chỗ cho dòng thứ hai (Phòng)
+            if (entryHeight >= (lineHeight * 2 * 0.8) + (2 * textPaddingY) && (currentTextY + fm.getDescent() <= y + entryHeight - textPaddingY)) {
+                Room room = entry.getRoom();
+                String roomName = (room != null) ? room.getRoomName() : "N/A";
+                g2.drawString(getEllipsisText("P: " + roomName, maxWidth, fm), textX, currentTextY);
+                currentTextY += lineHeight;
+
+                // Kiểm tra đủ chỗ cho dòng thứ ba (Giáo viên)
+                if (entryHeight >= (lineHeight * 3 * 0.8) + (2 * textPaddingY) && (currentTextY + fm.getDescent() <= y + entryHeight - textPaddingY)) {
+                    Teacher teacher = (entry.getCourseOffering() != null) ? entry.getCourseOffering().getTeacher() : null;
+                    String teacherName = (teacher != null) ? teacher.getName() : "N/A";
+                    // Lấy tên viết tắt hoặc một phần tên để ngắn gọn
+                    String displayTeacherName = teacherName;
+                    if (teacherName.length() > 10) { // Ví dụ: chỉ hiển thị 10 ký tự đầu
+                        displayTeacherName = teacherName.substring(0, 10) + "...";
+                    }
+                    g2.drawString(getEllipsisText("GV: " + displayTeacherName, maxWidth, fm), textX, currentTextY);
                 }
             }
         }
+        g2.setFont(originalFontForEntry);
     }
-    
-    // Helper method to truncate text with ellipsis if too long
+
     private String getEllipsisText(String text, int maxWidth, FontMetrics fm) {
         if (fm.stringWidth(text) <= maxWidth) {
             return text;
         }
-        
         String ellipsis = "...";
         int len = text.length();
+        // Lặp để cắt bớt ký tự cho đến khi vừa
         while (len > 0 && fm.stringWidth(text.substring(0, len) + ellipsis) > maxWidth) {
             len--;
         }
-        return text.substring(0, len) + ellipsis;
+        return (len > 0) ? text.substring(0, len) + ellipsis : ellipsis;
     }
 
     @Override
     public String getToolTipText(java.awt.event.MouseEvent event) {
-        if (entries == null) return null;
+        if (entries == null || currentWeekStart == null) return null;
+
         int mx = event.getX();
         int my = event.getY();
-        
+
+        int panelWidth = getWidth();
+        int gridContentWidth = panelWidth - TIME_LABEL_WIDTH - GRID_MARGIN * 2;
+        int colWidth = gridContentWidth / DAYS.length;
+        int gridStartX = GRID_MARGIN + TIME_LABEL_WIDTH;
+        int gridStartY = GRID_MARGIN + HEADER_HEIGHT;
+
+
         for (ScheduleEntry entry : entries) {
-            LocalDateTime start = entry.getStartDateTime();
-            LocalDateTime end = entry.getEndDateTime();
-            LocalDate entryDate = start.toLocalDate();
+            if (entry.getDate() == null || !isDateInCurrentWeek(entry.getDate())) continue;
+
+            LocalDateTime startDateTime = entry.getStartDateTime();
+            LocalDateTime endDateTime = entry.getEndDateTime();
+            if (startDateTime == null || endDateTime == null) continue;
+
+            LocalDate entryDate = entry.getDate();
+            int dayIndex = entryDate.getDayOfWeek().getValue() - 1;
+
+            double startHourFraction = startDateTime.getHour() + startDateTime.getMinute() / 60.0;
+            double endHourFraction = endDateTime.getHour() + endDateTime.getMinute() / 60.0;
             
-            // Skip entries not in the current week
-            if (!isDateInCurrentWeek(entryDate)) continue;
+            double effectiveStartHour = Math.max(startHourFraction, START_HOUR);
+            double effectiveEndHour = Math.min(endHourFraction, END_HOUR);
+
+            if (effectiveEndHour <= effectiveStartHour) continue; // Không hiển thị nếu nằm ngoài khung giờ
+
+            int x = gridStartX + dayIndex * colWidth;
+            int y = gridStartY + (int) ((effectiveStartHour - START_HOUR) * SLOT_HEIGHT);
+            int entryHeight = (int) ((effectiveEndHour - effectiveStartHour) * SLOT_HEIGHT);
             
-            // Calculate days since start of week
-            int daysSinceWeekStart = (int) java.time.temporal.ChronoUnit.DAYS.between(currentWeekStart, entryDate);
-            if (daysSinceWeekStart < 0 || daysSinceWeekStart >= DAYS.length) continue;
-            
-            int y = GRID_MARGIN + (int)((start.getHour() + start.getMinute()/60.0 - START_HOUR) * SLOT_HEIGHT);
-            int height = (int)(((end.toLocalTime().toSecondOfDay() - start.toLocalTime().toSecondOfDay()) / 3600.0) * SLOT_HEIGHT);
-            int x = GRID_MARGIN + 40 + daysSinceWeekStart * SLOT_WIDTH;
-            
-            if (mx >= x+4 && mx <= x+SLOT_WIDTH-4 && my >= y+4 && my <= y+height-4) {
-                String courseName = entry.getCourse() != null ? entry.getCourse().getCourseName() : "No Course";
-                String roomName = entry.getRoom() != null ? entry.getRoom().getRoomName() : "No Room";
-                String teacherName = entry.getCourse() != null && entry.getCourse().getTeacher() != null ? 
-                                    entry.getCourse().getTeacher().getName() : "No Teacher";
-                String className = entry.getCourse() != null && entry.getCourse().getSchoolClass() != null ? 
-                                  entry.getCourse().getSchoolClass().getName() : "No Class";
-                
-                return String.format("<html>%s<br>%s %s<br>%s - %s<br>Room: %s<br>Teacher: %s<br>Class: %s</html>", 
-                    courseName, 
-                    entryDate.getDayOfWeek(), 
-                    entryDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                    start.toLocalTime(), 
-                    end.toLocalTime(), 
-                    roomName,
-                    teacherName,
-                    className);
+            // Hit detection: kiểm tra xem chuột có nằm trong hình chữ nhật của entry không
+            if (mx >= x && mx <= x + colWidth && my >= y && my <= y + entryHeight) {
+                Course course = entry.getCourse();
+                Room room = entry.getRoom();
+                Teacher teacher = (entry.getCourseOffering() != null) ? entry.getCourseOffering().getTeacher() : null;
+                SchoolClass schoolClass = entry.getSchoolClass(); // Lấy trực tiếp từ entry
+
+                String courseName = (course != null) ? course.getCourseName() : "N/A";
+                String courseCode = (course != null) ? course.getCourseCode() : "N/A";
+                String roomName = (room != null) ? room.getRoomName() : "N/A";
+                String teacherName = (teacher != null) ? teacher.getName() : "N/A";
+                String className = (schoolClass != null) ? schoolClass.getName() : "N/A"; // SchoolClass đã có getName()
+
+                return String.format("<html><b>%s (%s)</b><br>" +
+                                     "Thời gian: %s - %s (%s %s)<br>" +
+                                     "Phòng: %s<br>" +
+                                     "GV: %s<br>" +
+                                     "Lớp: %s</html>",
+                        courseName, courseCode,
+                        startDateTime.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")),
+                        endDateTime.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm")),
+                        entry.getDate().getDayOfWeek().toString().substring(0,1).toUpperCase() + entry.getDate().getDayOfWeek().toString().substring(1).toLowerCase(),
+                        entry.getDate().format(dayFormatter),
+                        roomName,
+                        teacherName,
+                        className);
             }
         }
-        return null;
+        return null; // Không có tooltip nếu không trỏ vào entry nào
     }
-} 
+}

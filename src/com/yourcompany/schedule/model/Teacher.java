@@ -1,17 +1,19 @@
 package com.yourcompany.schedule.model;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Objects;
+// import java.util.ArrayList; // No longer needed for subjects
+// import java.util.List; // No longer needed for subjects
 
 public class Teacher {
     private int teacherId;
     private String name;
     private String email;
     private String phoneNumber;
-    private List<String> subjects;
+    // private List<String> subjects; // Removed, relationship now through CourseOffering
+    private Integer classId; // FK to SchoolClass, nullable if teacher is not a head teacher
 
     public Teacher() {
-        this.subjects = new ArrayList<>();
+        // this.subjects = new ArrayList<>(); // Removed
     }
 
     public Teacher(int teacherId, String name, String email, String phoneNumber) {
@@ -19,7 +21,15 @@ public class Teacher {
         this.name = name;
         this.email = email;
         this.phoneNumber = phoneNumber;
-        this.subjects = new ArrayList<>();
+        // this.subjects = new ArrayList<>(); // Removed
+    }
+    
+    public Teacher(int teacherId, String name, String email, String phoneNumber, Integer classId) {
+        this.teacherId = teacherId;
+        this.name = name;
+        this.email = email;
+        this.phoneNumber = phoneNumber;
+        this.classId = classId;
     }
 
     public int getTeacherId() {
@@ -54,26 +64,35 @@ public class Teacher {
         this.phoneNumber = phoneNumber;
     }
 
-    public List<String> getSubjects() {
-        return subjects;
+    public Integer getClassId() {
+        return classId;
     }
 
-    public void setSubjects(List<String> subjects) {
-        this.subjects = subjects;
+    public void setClassId(Integer classId) {
+        this.classId = classId;
     }
 
-    public void addSubject(String subject) {
-        if (!subjects.contains(subject)) {
-            subjects.add(subject);
-        }
+    // Methods related to 'subjects' are removed as this relationship is now handled by CourseOffering
+    // public List<String> getSubjects() { return subjects; }
+    // public void setSubjects(List<String> subjects) { this.subjects = subjects; }
+    // public void addSubject(String subject) { ... }
+    // public void removeSubject(String subject) { ... }
+    
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Teacher teacher = (Teacher) o;
+        return teacherId == teacher.teacherId; // So sánh dựa trên ID
     }
 
-    public void removeSubject(String subject) {
-        subjects.remove(subject);
+    @Override
+    public int hashCode() {
+        return Objects.hash(teacherId); // Hash dựa trên ID
     }
-
+    
     @Override
     public String toString() {
         return name;
     }
-} 
+}

@@ -5,31 +5,21 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseConnector {
-    private static final String URL = "jdbc:mysql://localhost:3306/schedule_db";
-    private static final String USER = "java";
-    private static final String PASSWORD = "Vuongtuenhi15052005!";
+    // Thay đổi cổng và tên database nếu cần
+    private static final String BASE_URL = "jdbc:mysql://localhost:3307/";
+    private static final String DEFAULT_DB_NAME = "schedule_db";
+    private static final String USER = "root";
+    private static final String PASSWORD = "";
 
-    private Connection connection;
-
-    public Connection getConnection() throws SQLException {
-        if (connection == null || connection.isClosed()) {
-            try {
-                connection = DriverManager.getConnection(URL, USER, PASSWORD);
-            } catch (SQLException e) {
-                // If the database doesn't exist yet, connect to MySQL without a specific database
-                connection = DriverManager.getConnection("jdbc:mysql://localhost:3306/", USER, PASSWORD);
-            }
-        }
-        return connection;
+    public Connection getConnection(String dbName) throws SQLException {
+        String targetDbName = (dbName == null || dbName.trim().isEmpty()) ? DEFAULT_DB_NAME : dbName.trim();
+        String connectionUrl = BASE_URL + targetDbName + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"; // Thêm các tham số cần thiết
+        
+        return DriverManager.getConnection(connectionUrl, USER, PASSWORD);
     }
 
-    public void closeConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    public Connection getServerConnection() throws SQLException {
+        String connectionUrl = BASE_URL + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
+        return DriverManager.getConnection(connectionUrl, USER, PASSWORD);
     }
-} 
+}
